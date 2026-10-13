@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { color-scheme: dark; }
+  body { @apply bg-zinc-950 font-sans antialiased; }
+  ::selection { @apply bg-violet-500/40; }
+  * { scrollbar-width: thin; scrollbar-color: #3f3f46 transparent; }
+}
