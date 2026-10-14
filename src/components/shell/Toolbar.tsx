@@ -35,10 +35,10 @@ export function Toolbar({ commands }: { commands: Command[] }) {
   const mode = useClubStore((s) => s.schema.editorMode);
   const setEditorMode = useClubStore((s) => s.setEditorMode);
   const by = (id: string) => commands.find((c) => c.id === id);
-  const modes: { value: EditorMode; label: React.ReactNode; title: string }[] = [
-    { value: 'easy', label: <><Sparkles className="h-3.5 w-3.5" /><span className="hidden lg:inline">{t('mode.easyLabel')}</span></>, title: t('mode.easy') },
-    { value: 'advanced', label: <><SlidersHorizontal className="h-3.5 w-3.5" /><span className="hidden lg:inline">{t('mode.advancedLabel')}</span></>, title: t('mode.advanced') },
-    { value: 'pro', label: <><Code2 className="h-3.5 w-3.5" /><span className="hidden lg:inline">{t('mode.proLabel')}</span></>, title: t('mode.pro') },
+  const modes: { value: EditorMode; label: React.ReactNode; title: string; ariaLabel: string }[] = [
+    { value: 'easy', label: <><Sparkles className="h-3.5 w-3.5" /><span className="hidden lg:inline">{t('mode.easyLabel')}</span></>, title: t('mode.easy'), ariaLabel: t('mode.easyLabel') },
+    { value: 'advanced', label: <><SlidersHorizontal className="h-3.5 w-3.5" /><span className="hidden lg:inline">{t('mode.advancedLabel')}</span></>, title: t('mode.advanced'), ariaLabel: t('mode.advancedLabel') },
+    { value: 'pro', label: <><Code2 className="h-3.5 w-3.5" /><span className="hidden lg:inline">{t('mode.proLabel')}</span></>, title: t('mode.pro'), ariaLabel: t('mode.proLabel') },
   ];
 
   return (

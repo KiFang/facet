@@ -5,6 +5,8 @@ export interface SegmentedOption<T extends string> {
   value: T;
   label: React.ReactNode;
   title?: string;
+  /** Доступное имя, если подпись может скрываться (узкое окно — только значок). */
+  ariaLabel?: string;
 }
 
 interface SegmentedProps<T extends string> {
@@ -30,6 +32,7 @@ export function Segmented<T extends string>({ value, options, onChange, classNam
           key={o.value}
           value={o.value}
           title={o.title}
+          aria-label={o.ariaLabel}
           className={cn(
             'flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[5px] font-medium text-fg-muted transition-colors hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 data-[state=on]:bg-panel data-[state=on]:text-fg data-[state=on]:shadow-panel',
             size === 'sm' ? 'h-6 px-2 text-xs' : 'h-7 px-2.5 text-xs',

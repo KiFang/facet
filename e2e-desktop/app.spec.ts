@@ -14,6 +14,12 @@ test.beforeAll(async () => {
     env: { ...process.env, FACET_USER_DATA: userData, LANG: 'ru_RU.UTF-8' },
   });
   page = await app.firstWindow();
+  // Как на раннере Windows с экраном 1024×768: окно прижато к рабочей области, панель инструментов узкая.
+  await app.evaluate(({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows()[0];
+    w.setMinimumSize(800, 600);
+    w.setContentSize(1008, 700); // ширина содержимого окна 1024 px с рамкой Windows
+  });
   await expect(page.getByTestId('portal-preview').locator('.fx-shell')).toBeVisible({ timeout: 30_000 });
   await page.evaluate(() => {
     localStorage.setItem('facet-os:ui', JSON.stringify({ state: { locale: 'ru' }, version: 0 }));
