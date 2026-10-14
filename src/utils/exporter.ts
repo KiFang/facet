@@ -243,12 +243,12 @@ export function generatePortalHtml(schema: ClubSchema): string {
     <meta name="description" content="${esc(schema.motto)}" />
     <meta name="theme-color" content="${schema.theme.colors.primary}" />
     <title>${esc(schema.clubName)}</title>
-${logo ? `    <link rel="icon" href="/${logo.path}" />\n` : ''}${font ? `    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n    <link rel="stylesheet" href="${font}" />\n` : ''}    <link rel="stylesheet" href="/portal.css" />
+${logo ? `    <link rel="icon" href="${logo.path}" />\n` : ''}${font ? `    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n    <link rel="stylesheet" href="${font}" />\n` : ''}    <link rel="stylesheet" href="portal.css" />
   </head>
   <body>
-    <div id="app"${logo ? ` data-logo="/${logo.path}"` : ''}><div class="fx-root"><div class="fx-shell"><div class="fx-empty">…</div></div></div></div>
-    <script src="/portal.js" defer></script>
-${pluginScripts(schema).map((src) => `    <script src="${src}" defer></script>\n`).join('')}  </body>
+    <div id="app"${logo ? ` data-logo="${logo.path}"` : ''}><div class="fx-root"><div class="fx-shell"><div class="fx-empty">…</div></div></div></div>
+    <script src="portal.js" defer></script>
+${pluginScripts(schema).map((src) => `    <script src="${src.replace(/^\//, '')}" defer></script>\n`).join('')}  </body>
 </html>
 `;
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
-  Cloud, FileJson, FolderOpen, Home, LayoutTemplate, Link2, Monitor, PackagePlus, Palette, Plug, RefreshCcw, Rocket, Settings2,
+  Landmark, Cloud, FileJson, FolderOpen, Home, LayoutTemplate, Link2, Monitor, PackagePlus, Palette, Plug, RefreshCcw, Rocket, Settings2,
 } from 'lucide-react';
 import { useClubStore } from '@/store/useClubStore';
+import { useHubLink } from '@/store/useHubLink';
 import { useWorkbench } from '@/store/useWorkbench';
 import { useT, useUiLocale } from '@/i18n';
 import { manifestOf, settingsProblems, tr } from '@/plugins/runtime';
@@ -103,6 +104,7 @@ export function PublishProperties({ commands }: { commands: Command[] }) {
   const t = useT();
   const locale = useUiLocale();
   const baseline = useClubStore((s) => s.baseline);
+  const hubLink = useHubLink((s) => s.link);
   const run = (id: string) => commands.find((c) => c.id === id)?.run();
   const [local, setLocal] = useState<LocalServerInfo | null>(null);
   useEffect(() => {
@@ -140,6 +142,14 @@ export function PublishProperties({ commands }: { commands: Command[] }) {
           <Button size="sm" variant={baseline ? 'secondary' : 'primary'} onClick={() => run('file.exportInstall')}><PackagePlus className="h-3.5 w-3.5" /> {t('export.install')}</Button>
           <Button size="sm" variant={baseline ? 'primary' : 'secondary'} onClick={() => run('file.exportUpdate')}><RefreshCcw className="h-3.5 w-3.5" /> {t('export.update')}</Button>
         </>,
+      )}
+      {card(
+        <Landmark className="h-4 w-4" />,
+        t('hub.title'),
+        hubLink ? `${t('hub.linked', { name: hubLink.name, hub: hubLink.hub.replace(/^https?:\/\//, '') })}${hubLink.status === 'pending' ? ` ${t('hub.pendingNote')}` : ''}` : t('hub.cardText'),
+        <Button size="sm" variant={hubLink ? 'primary' : 'secondary'} onClick={() => run('file.hub')} data-testid="publish-hub">
+          {hubLink ? <RefreshCcw className="h-3.5 w-3.5" /> : <Landmark className="h-3.5 w-3.5" />} {t(hubLink ? 'hub.manage' : 'hub.connect')}
+        </Button>,
       )}
       {card(
         <FileJson className="h-4 w-4" />,

@@ -71,7 +71,7 @@ export function canManageStaff(schema: ClubSchema, user: StaffUser | null): bool
 
 /* ------------------------------ PocketBase ---------------------------------- */
 
-const STORAGE_KEY = 'facet-staff-auth';
+const STORAGE_PREFIX = 'facet-staff-auth';
 
 interface Stored {
   token: string;
@@ -107,6 +107,8 @@ export async function apiFetch<T>(url: string, init: RequestInit, token: string 
 
 /** Сессия на сервере клуба: токен хранится в localStorage этого браузера. */
 export function pocketbaseSession(base = ''): Session {
+  // Свой вход для каждого клуба, даже если они на одном домене (хаб вуза).
+  const STORAGE_KEY = `${STORAGE_PREFIX}${base}`;
   let stored: Stored | null = null;
   try {
     stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');

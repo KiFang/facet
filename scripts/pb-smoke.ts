@@ -167,7 +167,7 @@ async function presets() {
       check(settings.meta?.appName === 'Smoke Club', 'хук применил имя клуба');
       check(settings.trustedProxy?.headers?.includes('X-Real-IP'), 'хук доверяет X-Real-IP от Nginx');
       const index = await fetch(`${s.url}/`).then((r) => r.text());
-      check(index.includes('/portal.js'), 'портал отдаётся');
+      check(index.includes('src="portal.js"'), 'портал отдаётся');
       check((await fetch(`${s.url}/portal.js`)).ok, 'portal.js отдаётся');
       if (preset === 'general') {
         const members = await list(s, 'members');

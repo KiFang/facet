@@ -7,6 +7,7 @@ import { ImportDialog } from '../ImportDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { PluginsDialog } from './PluginsDialog';
 import { NewModuleDialog } from './NewModuleDialog';
+import { HubDialog } from './HubDialog';
 import { AboutDialog, CommandPalette, ShortcutsDialog, TemplatesDialog, WelcomeDialog } from './MiscDialogs';
 
 // Экспорт (сборка архивов, JSZip) грузится только при открытии.
@@ -42,6 +43,8 @@ export function DialogHost({ commands }: { commands: Command[] }) {
       return <ShortcutsDialog commands={commands} />;
     case 'about':
       return <AboutDialog />;
+    case 'hub':
+      return <HubDialog />;
     case 'import':
       return <ImportDialog entityId={arg ?? undefined} onClose={close} />;
     default:

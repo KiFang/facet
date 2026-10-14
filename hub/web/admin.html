@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Кабинет вуза — {{hubName}}</title>
+  <link rel="stylesheet" href="/hub/static/hub.css" />
+  <style>:root { --accent: {{accent}}; }</style>
+  <script src="/hub/static/admin.js" defer></script>
+</head>
+<body>
+  <main>
+    <section id="login" class="narrow hidden" style="max-width:420px;margin:40px auto">
+      <h1>Кабинет вуза</h1>
+      <p class="muted">{{hubName}}</p>
+      <form id="login-form" class="card">
+        <label for="login-email">Почта</label>
+        <input id="login-email" type="email" autocomplete="username" required />
+        <label for="login-password">Пароль</label>
+        <input id="login-password" type="password" autocomplete="current-password" required />
+        <div id="login-error" class="alert error hidden" role="alert"></div>
+        <p><button class="btn primary" type="submit">Войти</button></p>
+      </form>
+    </section>
+
+    <section id="app" class="hidden">
+      <div class="hero">
+        <div>
+          <h1>{{hubName}}</h1>
+          <div class="muted"><span id="me"></span> · Facet Hub {{version}}</div>
+        </div>
+        <div class="actions">
+          <a class="btn" href="/">Главная хаба</a>
+          <button class="btn" type="button" id="logout">Выйти</button>
+        </div>
+      </div>
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="clubs" aria-selected="true">Клубы</button>
+        <button role="tab" data-tab="requests">Заявки <span id="req-count"></span></button>
+        <button role="tab" data-tab="invites">Приглашения</button>
+        <button role="tab" data-tab="summary">Сводка</button>
+        <button role="tab" data-tab="policy">Настройки</button>
+        <button role="tab" data-tab="admins">Администраторы</button>
+        <button role="tab" data-tab="audit">Журнал</button>
+      </div>
+      <div id="flash" class="alert hidden" role="status"></div>
+
+      <div data-panel="clubs">
+        <div class="table-wrap"><table>
+          <thead><tr><th>Клуб</th><th>Статус</th><th>Председатель</th><th>Обновлён</th><th></th></tr></thead>
+          <tbody id="clubs-body"></tbody>
+        </table></div>
+        <p class="hint" id="access-note"></p>
+      </div>
+
+      <div data-panel="requests" class="hidden">
+        <div class="table-wrap"><table>
+          <thead><tr><th>Клуб</th><th>Председатель</th><th>Подана</th><th></th></tr></thead>
+          <tbody id="requests-body"></tbody>
+        </table></div>
+      </div>
+
+      <div data-panel="invites" class="hidden">
+        <form id="invite-form" class="card row">
+          <div><label for="inv-note">Для кого</label><input id="inv-note" placeholder="Шахматный клуб" /></div>
+          <div><label for="inv-uses">Сколько клубов</label><input id="inv-uses" type="number" min="1" value="1" /></div>
+          <div><label for="inv-days">Действует, дней</label><input id="inv-days" type="number" min="1" value="14" /></div>
+          <div><button class="btn primary" type="submit">Создать приглашение</button></div>
+        </form>
+        <div id="invite-new" class="secret hidden"></div>
+        <h2>Действующие</h2>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Для кого</th><th>Код</th><th class="num">Использовано</th><th>До</th><th></th></tr></thead>
+          <tbody id="invites-body"></tbody>
+        </table></div>
+      </div>
+
+      <div data-panel="summary" class="hidden">
+        <div class="row">
+          <div><label for="sum-days">Период</label>
+            <select id="sum-days"><option value="7">7 дней</option><option value="30" selected>30 дней</option><option value="90">90 дней</option><option value="180">Семестр (180 дней)</option><option value="365">Год</option></select>
+          </div>
+          <div><button class="btn" type="button" id="sum-load">Обновить</button> <button class="btn" type="button" id="sum-csv">Скачать CSV</button></div>
+        </div>
+        <p class="hint">Только сводные цифры: сколько записей в разделах и сколько добавлено за период, итоги касс и складов. Сами записи клубов вуз не получает.</p>
+        <div class="grid" id="sum-cards"></div>
+        <div id="sum-body"></div>
+      </div>
+
+      <div data-panel="policy" class="hidden">
+        <form id="policy-form" class="card">
+          <h3>Хаб</h3>
+          <div class="row">
+            <div><label for="p-hubName">Название хаба</label><input id="p-hubName" name="hubName" /></div>
+            <div><label for="p-university">Вуз или колледж</label><input id="p-university" name="university" /></div>
+            <div><label for="p-accent">Цвет</label><input id="p-accent" name="accent" type="color" style="padding:2px" /></div>
+          </div>
+          <label class="check"><input type="checkbox" name="catalogPublic" /> <span>Показывать список клубов на главной</span></label>
+
+          <h3>Подключение клубов</h3>
+          <label for="p-joinMode">Кто может подключить клуб</label>
+          <select id="p-joinMode" name="joinMode">
+            <option value="invite">По приглашению вуза</option>
+            <option value="approve">Любой — по заявке, которую одобряет вуз</option>
+            <option value="open">Любой, сразу</option>
+          </select>
+          <label for="p-domains">Почта председателя только на доменах</label>
+          <input id="p-domains" name="allowedEmailDomains" placeholder="univer.ru, student.univer.ru" />
+          <div class="hint">Пусто — любые адреса.</div>
+          <label class="check"><input type="checkbox" name="allowDraftData" /> <span>Разрешить черновые данные при подключении</span></label>
+          <label class="check"><input type="checkbox" name="allowEditorUpload" /> <span>Клубы меняют структуру своей системы из редактора Facet OS<small>Иначе — только готовые шаблоны.</small></span></label>
+          <div class="row">
+            <div><label for="p-maxClubs">Лимит клубов</label><input id="p-maxClubs" name="maxClubs" type="number" min="1" /></div>
+            <div><label for="p-maxSeedRows">Строк импорта за раз</label><input id="p-maxSeedRows" name="maxSeedRows" type="number" min="0" /></div>
+            <div><label for="p-keepBackups">Копий перед обновлениями</label><input id="p-keepBackups" name="keepBackups" type="number" min="1" /></div>
+          </div>
+
+          <h3>Доступ вуза и безопасность</h3>
+          <label for="p-universityAccess">Что видит вуз</label>
+          <select id="p-universityAccess" name="universityAccess">
+            <option value="reports">Только сводные отчёты (рекомендуется)</option>
+            <option value="full">Полный доступ: вход в базу клуба</option>
+          </select>
+          <div class="hint">Полный доступ лучше включать только по договорённости с клубами — они увидят это на странице подключения.</div>
+          <label class="check"><input type="checkbox" name="dangerNeedsApproval" /> <span>Изменения, удаляющие данные, — только через вуз</span></label>
+          <label class="check"><input type="checkbox" name="allowCustomPlugins" /> <span>Разрешить сторонние плагины с кодом<small>Их код выполняется на сервере вуза и в браузерах других клубов того же домена. Встроенные плагины разрешены всегда.</small></span></label>
+          <p><button class="btn primary" type="submit">Сохранить</button></p>
+        </form>
+      </div>
+
+      <div data-panel="admins" class="hidden">
+        <div class="table-wrap"><table>
+          <thead><tr><th>Почта</th><th>Добавлен</th><th></th></tr></thead>
+          <tbody id="admins-body"></tbody>
+        </table></div>
+        <form id="admin-form" class="card row" style="margin-top:12px">
+          <div><label for="adm-email">Почта</label><input id="adm-email" type="email" required /></div>
+          <div><label for="adm-password">Пароль</label><input id="adm-password" type="password" minlength="10" autocomplete="new-password" required /></div>
+          <div><button class="btn primary" type="submit">Добавить администратора</button></div>
+        </form>
+      </div>
+
+      <div data-panel="audit" class="hidden">
+        <div class="table-wrap"><table>
+          <thead><tr><th>Когда</th><th>Кто</th><th>Что</th><th>Клуб</th></tr></thead>
+          <tbody id="audit-body"></tbody>
+        </table></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -96,8 +96,9 @@ function facetApply(app, ops) {
         break;
       }
       case "bootstrapStaff": {
-        var email = $os.getenv("PB_ADMIN_EMAIL");
-        var password = $os.getenv("PB_ADMIN_PASSWORD");
+        // В хабе вуза председатель — отдельная учётная запись, не суперпользователь сервера.
+        var email = $os.getenv("FACET_CHAIR_EMAIL") || $os.getenv("PB_ADMIN_EMAIL");
+        var password = $os.getenv("FACET_CHAIR_PASSWORD") || $os.getenv("PB_ADMIN_PASSWORD");
         var staff = col(op.collection);
         if (!email || !password) {
           console.log("[facet] PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD не заданы — первая учётная запись актива не создана");
@@ -111,7 +112,7 @@ function facetApply(app, ops) {
         chair.setEmail(email);
         chair.setPassword(password);
         chair.setVerified(true);
-        chair.set("name", "Председатель");
+        chair.set("name", $os.getenv("FACET_CHAIR_NAME") || "Председатель");
         chair.set("role", op.role);
         app.save(chair);
         console.log("[facet] учётная запись председателя: " + email);

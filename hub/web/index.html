@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{hubName}}</title>
+  <link rel="stylesheet" href="/hub/static/hub.css" />
+  <style>:root { --accent: {{accent}}; }</style>
+</head>
+<body>
+  <main>
+    <div class="hero">
+      <div>
+        <h1>{{hubName}}</h1>
+        <div class="muted">{{university}}</div>
+      </div>
+      <div class="actions">
+        <a class="btn primary" href="/hub/join">Подключить клуб</a>
+        <a class="btn" href="/hub/admin">Кабинет вуза</a>
+      </div>
+    </div>
+    <p class="muted">Учётные системы студенческих клубов: касса, инвентарь, мероприятия, отчёты. У каждого клуба своя база; работать в ней может только актив клуба. {{joinHint}}</p>
+    <h2>Клубы</h2>
+    <!--raw:clubs-->
+    <footer>Facet Hub {{version}}</footer>
+  </main>
+</body>
+</html>

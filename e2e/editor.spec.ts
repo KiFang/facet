@@ -368,3 +368,61 @@ test('учёт: касса и выдача инвентаря, остатки и
   expect(init).toContain('"reg_cash"');
   expect(init).toContain('"reg_on_hand"');
 });
+
+test('хаб вуза: подключение клуба и обновление из редактора', async ({ page }) => {
+  const HUB = 'https://clubs.uni.test';
+  const info = { hub: 'facet-hub', version: '0.3.0', name: 'Клубы университета', university: 'Северный кампус', joinMode: 'invite', universityAccess: 'reports', allowEditorUpload: true, allowDraftData: true, allowCustomPlugins: false, allowedEmailDomains: [] };
+  let joinBody: Record<string, unknown> | null = null;
+  const updates: Record<string, unknown>[] = [];
+  await page.route(`${HUB}/hub/api/**`, async (route) => {
+    const url = new URL(route.request().url());
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (url.pathname === '/hub/api/info') return json(info);
+    if (url.pathname === '/hub/api/join') {
+      joinBody = route.request().postDataJSON();
+      return json({ slug: 'guild', name: 'Гильдия', status: 'active', token: 'fct_test', url: `${HUB}/c/guild/` });
+    }
+    if (url.pathname === '/hub/api/club') {
+      expect(route.request().headers().authorization).toBe('Bearer fct_test');
+      return json({ slug: 'guild', name: 'Гильдия', status: 'active', url: `${HUB}/c/guild/`, schema: null });
+    }
+    if (url.pathname === '/hub/api/club/update') {
+      const body = route.request().postDataJSON();
+      updates.push(body);
+      return json({ changes: [{ severity: 'danger', text: 'events: поле «location» будет удалено' }], danger: true, seeded: 0, same: false, applied: !body.dryRun });
+    }
+    return json({ message: 'нет' }, 404);
+  });
+
+  await page.getByTestId('nav-publish').click();
+  await page.getByTestId('publish-hub').click();
+  const dialog = page.getByRole('dialog', { name: 'Хаб вуза' });
+  await dialog.getByTestId('hub-url').fill('clubs.uni.test');
+  await dialog.getByTestId('hub-check').click();
+  await expect(dialog).toContainText('Клубы университета');
+  await expect(dialog).toContainText('только сводные цифры');
+  await expect(dialog.getByTestId('hub-join')).toBeDisabled();
+  await dialog.getByTestId('hub-invite').fill('inv_abc');
+  await dialog.getByTestId('hub-slug').fill('guild');
+  await dialog.getByTestId('hub-email').fill('chair@uni.test');
+  await dialog.getByTestId('hub-password').fill('chair-password');
+  await dialog.getByTestId('hub-join').click();
+  await expect(dialog.getByTestId('hub-status')).toHaveText('работает');
+  expect(joinBody).toMatchObject({ invite: 'inv_abc', slug: 'guild', chair: { email: 'chair@uni.test', password: 'chair-password' } });
+  expect((joinBody as unknown as { schema: { entities: unknown[] } }).schema.entities.length).toBeGreaterThan(0);
+
+  // Ключ клуба не попадает в схему.
+  const stored = await page.evaluate(() => localStorage.getItem('facet-os:schema') ?? '');
+  expect(stored).not.toContain('fct_test');
+
+  await dialog.getByTestId('hub-preview').click();
+  await expect(dialog.getByTestId('hub-changes')).toContainText('будет удалено');
+  await expect(dialog.getByTestId('hub-apply')).toBeDisabled();
+  await dialog.getByRole('checkbox').check();
+  await dialog.getByTestId('hub-apply').click();
+  await expect(dialog.getByTestId('hub-changes')).toContainText('обновлена');
+  expect(updates.map((u) => [u.dryRun, u.accept])).toEqual([[true, undefined], [false, true]]);
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('publish-hub')).toContainText('Обновить в хабе');
+});

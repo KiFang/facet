@@ -55,7 +55,7 @@ test('система клуба ставится, обновляется без 
   const installed = await info();
   expect(installed.running).toBe(true);
   const base = installed.url!;
-  expect(await (await fetch(`${base}/`)).text()).toContain('/portal.js');
+  expect(await (await fetch(`${base}/`)).text()).toContain('src="portal.js"');
   expect((await (await fetch(`${base}/club-schema.json`)).json()).clubName).toBe('Гильдия Северного кампуса');
 
   // Данные через API (как это сделал бы администратор в панели)

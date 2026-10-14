@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 import { build } from 'esbuild';
 import { fileURLToPath, URL } from 'node:url';
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 
 const SRC = fileURLToPath(new URL('./src', import.meta.url));
 const VIRTUAL_ID = 'virtual:facet-portal';
@@ -32,6 +33,15 @@ function facetPortalBundle(): Plugin {
           {
             name: 'alias',
             setup(b) {
+              // `?raw` (как в Vite) — текст файла, а не модуль: иначе код хуков PocketBase выполнится в браузере.
+              b.onResolve({ filter: /\?raw$/ }, async (args) => {
+                const clean = args.path.replace(/\?raw$/, '');
+                const r = clean.startsWith('@/')
+                  ? await b.resolve(`./${clean.slice(2)}`, { resolveDir: SRC, kind: args.kind })
+                  : await b.resolve(clean, { resolveDir: args.resolveDir, kind: args.kind });
+                return { path: r.path, namespace: 'raw' };
+              });
+              b.onLoad({ filter: /.*/, namespace: 'raw' }, async (args) => ({ contents: await readFile(args.path, 'utf8'), loader: 'text' }));
               b.onResolve({ filter: /^@\// }, (args) =>
                 b.resolve(`./${args.path.slice(2)}`, { resolveDir: SRC, kind: args.kind }),
               );
@@ -46,7 +56,25 @@ function facetPortalBundle(): Plugin {
   };
 }
 
-export default defineConfig({
+/**
+ * `vite build --mode hub` — ядро Facet Hub (src/hub/core.ts) одним CommonJS-файлом для Node:
+ * экспортёр, миграции и портал те же, что у редактора.
+ */
+const hubConfig = defineConfig({
+  plugins: [facetPortalBundle()],
+  resolve: { alias: { '@': SRC } },
+  build: {
+    ssr: path.join(SRC, 'hub/core.ts'),
+    outDir: 'hub/dist',
+    emptyOutDir: true,
+    target: 'node20',
+    minify: false,
+    rollupOptions: { output: { format: 'cjs', entryFileNames: 'core.cjs' } },
+  },
+  ssr: { noExternal: true },
+});
+
+export default defineConfig(({ mode }) => (mode === 'hub' ? hubConfig : {
   plugins: [react(), facetPortalBundle()],
   resolve: {
     alias: { '@': SRC },
@@ -73,4 +101,4 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     environment: 'node',
   },
-});
+}));

@@ -372,6 +372,47 @@ The server makes scheduled backups (configured in \`.env\`, optionally to S3). M
 `,
   },
   {
+    id: 'hub',
+    group: 'System',
+    title: 'University hub',
+    icon: 'Landmark',
+    body: `
+**Facet Hub** is a clubs server that a university or college runs itself. A club joins in a minute, and its accounting system runs on the university server: no server, domain or setup of its own.
+
+## What the university sees
+
+By default — **totals only**: record counts per section, how many were added in a period, cash and stock totals. The records themselves (people, amounts, loans) are visible only to the club team according to their roles. If the university enabled full access, this is shown when joining.
+
+## Connect a club from the editor
+
+1. Open **Publish → University hub** (or **File → University hub…**).
+2. Enter the hub address from your university and press **Check** — you will see the hub name and its rules.
+3. Enter the invite code (if the hub uses invites), the club address, the chair's email and password.
+4. **Connect** — the hub builds the system from your configuration. Data imported into the editor can be transferred right away.
+
+If the hub works with requests, the system opens after the university approves it.
+
+You can also join without the editor: the hub page has a **Connect a club** button — choose a template, accounting packs and draft data.
+
+## Club key
+
+When joining, the editor receives a **club key** and keeps it to itself — it never goes into the schema file or a share link. To update from another computer, choose **I have a key**. The university can reissue a lost key.
+
+## Update the system in the hub
+
+Change the configuration in the editor and open **University hub**:
+
+- **Check changes** — what will change in the database, without applying anything.
+- **Update system** — apply. Changes that delete data (a field, a section) need an extra confirmation. The hub makes a full backup first; the university can roll it back.
+
+Third-party plugins with code are usually not allowed in a hub — built-in ones (Telegram, autonumber, audit log) work.
+
+## Deploy a hub (for universities)
+
+The guide for IT staff is in the repository, \`hub/README.md\`: Docker, domain, first administrator, access settings.
+`,
+  },
+  {
     id: 'settings',
     group: 'System',
     title: 'Settings',

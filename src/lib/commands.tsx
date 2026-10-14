@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import {
   Blocks, BookOpen, Braces, Database, Download, FileJson, FileSpreadsheet, FolderOpen, Info, Keyboard, LayoutTemplate,
-  Link2, Monitor, Moon, Network, PackagePlus, Plug, Redo2, RefreshCcw, Rocket, Search, Settings, Sun, Trash2, Undo2, Upload,
+  Landmark, Link2, Monitor, Moon, Network, PackagePlus, Plug, Redo2, RefreshCcw, Rocket, Search, Settings, Sun, Trash2, Undo2, Upload,
   type LucideIcon,
 } from 'lucide-react';
 import { useClubStore, useHistory } from '@/store/useClubStore';
@@ -97,6 +97,7 @@ export function useCommands(): Command[] {
       }, { icon: Link2 }),
       c('file.exportInstall', 'file', 'cmd.exportInstall', () => wb.open('export', 'install'), { icon: PackagePlus, shortcut: 'Ctrl+E' }),
       c('file.exportUpdate', 'file', 'cmd.exportUpdate', () => wb.open('export', 'update'), { icon: RefreshCcw }),
+      c('file.hub', 'file', 'cmd.hub', () => wb.open('hub'), { icon: Landmark, keywords: 'вуз университет колледж hub university' }),
       ...(desktop() ? [c('file.exportLocal', 'file', 'cmd.exportLocal', () => wb.open('export', 'local'), { icon: Monitor })] : []),
       c('file.backup', 'file', 'cmd.backup', () => {
         const s = club();

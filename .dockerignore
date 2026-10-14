@@ -1,0 +1,9 @@
+node_modules
+dist
+release
+desktop/bin
+hub/dist
+hub-data
+test-results
+playwright-report
+.git

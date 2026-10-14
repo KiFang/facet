@@ -1,0 +1,36 @@
+# Facet Hub: docker compose up -d   (настройки — в .env рядом, см. hub/README.md)
+services:
+  hub:
+    build:
+      context: ..
+      dockerfile: hub/Dockerfile
+    image: facet-hub
+    restart: unless-stopped
+    environment:
+      HUB_ADMIN_EMAIL: ${HUB_ADMIN_EMAIL:?укажите HUB_ADMIN_EMAIL в .env}
+      HUB_ADMIN_PASSWORD: ${HUB_ADMIN_PASSWORD:?укажите HUB_ADMIN_PASSWORD в .env}
+      HUB_PUBLIC_URL: ${HUB_PUBLIC_URL:-}
+      HUB_TRUST_PROXY: ${HUB_TRUST_PROXY:-1}
+      TZ: ${TZ:-Europe/Moscow}
+    volumes:
+      - hub-data:/data
+    ports:
+      - "${HUB_BIND:-127.0.0.1}:${HUB_PORT:-8080}:8080"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles: ["https"]
+    environment:
+      DOMAIN: ${DOMAIN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [hub]
+
+volumes:
+  hub-data:
+  caddy-data:

@@ -61,6 +61,48 @@ jobs:
           unzip -q pb.zip pocketbase -d pb
       - run: npm run smoke:pb -- --pb ./pb/pocketbase
 
+  hub:
+    name: Facet Hub (real PocketBase · Docker image)
+    runs-on: ubuntu-latest
+    needs: check
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Download PocketBase
+        run: |
+          curl -fsSL -o pb.zip "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip"
+          unzip -q pb.zip pocketbase -d pb
+      - run: npm run build:hub
+      - run: node scripts/hub-smoke.mjs --pb ./pb/pocketbase
+
+      - name: Docker image — join a club through the container
+        run: |
+          set -eux
+          docker build -f hub/Dockerfile -t facet-hub .
+          docker run -d --name hub -p 8080:8080 -e HUB_ADMIN_EMAIL=it@uni.test -e HUB_ADMIN_PASSWORD=ci-hub-password facet-hub
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
+          B=http://127.0.0.1:8080
+          curl -fsS -c jar -H 'content-type: application/json' -d '{"email":"it@uni.test","password":"ci-hub-password"}' "$B/hub/api/login"
+          INVITE=$(curl -fsS -b jar -H 'content-type: application/json' -d '{"note":"ci"}' "$B/hub/api/admin/invites" | jq -r .code)
+          curl -fsS -H 'content-type: application/json' \
+            -d "{\"invite\":\"$INVITE\",\"slug\":\"ci-club\",\"name\":\"CI\",\"template\":\"general\",\"packs\":[\"cash\"],\"draft\":true,\"chair\":{\"email\":\"chair@uni.test\",\"password\":\"chair-password\"}}" \
+            "$B/hub/api/join" | jq -e '.status == "active"'
+          curl -fsS "$B/c/ci-club/api/health" | jq -e '.code == 200'
+          curl -fsS "$B/c/ci-club/" | grep -q 'src="portal.js"'
+          curl -fsS -H 'content-type: application/json' -d '{"identity":"chair@uni.test","password":"chair-password"}' \
+            "$B/c/ci-club/api/collections/staff/auth-with-password" | jq -e '.record.role == "chair"'
+          docker restart hub
+          for i in $(seq 1 60); do curl -fsS "$B/c/ci-club/api/health" && break; sleep 1; done
+          curl -fsS "$B/c/ci-club/api/health" | jq -e '.code == 200'
+      - if: failure()
+        run: docker logs hub || true
+
   desktop:
     name: Desktop app (Linux, unpackaged)
     runs-on: ubuntu-latest
@@ -104,7 +146,7 @@ jobs:
         run: |
           set -eux
           B=http://127.0.0.1:8080
-          curl -fsS "$B/" | grep -q '/portal.js'
+          curl -fsS "$B/" | grep -q 'src="portal.js"'
           curl -fsS "$B/portal.js" -o /dev/null
           curl -fsS "$B/club-schema.json" | grep -q '"clubName"'
           curl -fsS "$B/api/health" | grep -q '"code":200'
