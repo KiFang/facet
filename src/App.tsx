@@ -20,9 +20,12 @@ function useShareLink() {
   useEffect(() => {
     const open = async () => {
       if (!location.hash.startsWith('#s=')) return;
-      const locale = useUiStore.getState().locale;
-      const schema = await decodeShareHash(location.hash);
+      // Забираем ссылку сразу, до асинхронного разбора: повторный вызов (монтирование + hashchange)
+      // уже не увидит её и не откроет схему второй раз.
+      const hash = location.hash;
       history.replaceState(null, '', location.pathname + location.search);
+      const locale = useUiStore.getState().locale;
+      const schema = await decodeShareHash(hash);
       if (!schema) {
         toast('error', translate(locale, 'share.invalid'));
         return;
