@@ -8,7 +8,8 @@ export type Selection =
   | { kind: 'home' }
   | { kind: 'entity'; id: string }
   | { kind: 'plugins' }
-  | { kind: 'publish' };
+  | { kind: 'publish' }
+  | { kind: 'roles' };
 
 export type WorkspaceTab = 'portal' | 'diagram' | 'json';
 

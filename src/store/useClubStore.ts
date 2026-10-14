@@ -3,11 +3,14 @@ import { persist } from 'zustand/middleware';
 import { temporal, type TemporalState } from 'zundo';
 import { buildPresetSchema } from '@/data/presets';
 import { normalizeSchema, normalizeView } from '@/utils/normalize';
+import { withRoles, CHAIR_ROLE } from '@/utils/access';
 import type { InstalledPlugin, PluginManifest } from '@/plugins/types';
 import { BUILTIN_BY_ID } from '@/plugins/catalog';
 import { defaultSettings, manifestOf } from '@/plugins/runtime';
 import type {
+  AccessLevel,
   ClubEntity,
+  ClubRole,
   ClubSchema,
   DashboardConfig,
   EditorMode,
@@ -72,6 +75,13 @@ export interface ClubState {
   loadPreset: (preset: PresetId) => void;
   replaceSchema: (schema: ClubSchema) => void;
 
+  /** Роли актива. */
+  addRole: (role: ClubRole) => void;
+  updateRole: (id: string, patch: Partial<Omit<ClubRole, 'id'>>) => void;
+  removeRole: (id: string) => void;
+  setRoleAccess: (roleId: string, entityId: string, level: AccessLevel) => void;
+  setEntityPublic: (entityId: string, isPublic: boolean) => void;
+
   installPlugin: (idOrManifest: string | PluginManifest) => void;
   setPluginEnabled: (id: string, enabled: boolean) => void;
   setPluginSettings: (id: string, patch: InstalledPlugin['settings']) => void;
@@ -85,7 +95,7 @@ export interface ClubState {
   clearSeeds: (entityId?: string) => void;
 }
 
-const initialSchema = (): ClubSchema => normalizeSchema({ ...buildPresetSchema('general'), editorMode: 'easy' });
+const initialSchema = (): ClubSchema => withRoles(normalizeSchema({ ...buildPresetSchema('general'), editorMode: 'easy' }));
 
 const mapEntity = (
   schema: ClubSchema,
@@ -168,8 +178,14 @@ export const useClubStore = create<ClubState>()(
               );
             const seeds = { ...s.seeds };
             delete seeds[id];
+            const roles = s.schema.roles?.map((r) => {
+              if (!r.access || !(id in r.access)) return r;
+              const access = { ...r.access };
+              delete access[id];
+              return { ...r, access };
+            });
             return {
-              schema: { ...s.schema, entities },
+              schema: { ...s.schema, entities, roles },
               seeds,
               activeEntityId: s.activeEntityId === id ? (entities[0]?.id ?? null) : s.activeEntityId,
             };
@@ -199,8 +215,14 @@ export const useClubStore = create<ClubState>()(
               seeds[nextId] = { ...seeds[id], entityId: nextId };
               delete seeds[id];
             }
+            const roles = s.schema.roles?.map((r) => {
+              if (!r.access || !(id in r.access)) return r;
+              const access = { ...r.access, [nextId]: r.access[id] };
+              delete access[id];
+              return { ...r, access };
+            });
             return {
-              schema: { ...s.schema, entities },
+              schema: { ...s.schema, entities, roles },
               seeds,
               activeEntityId: s.activeEntityId === id ? nextId : s.activeEntityId,
             };
@@ -274,18 +296,44 @@ export const useClubStore = create<ClubState>()(
 
         loadPreset: (preset) =>
           set((s) => {
-            const next = normalizeSchema({ ...buildPresetSchema(preset), editorMode: s.schema.editorMode, locale: s.schema.locale });
+            const next = withRoles(normalizeSchema({ ...buildPresetSchema(preset), editorMode: s.schema.editorMode, locale: s.schema.locale }));
             return { schema: next, seeds: {}, activeEntityId: next.entities[0]?.id ?? null };
           }),
 
         replaceSchema: (schema) =>
           set((s) => {
-            const next = normalizeSchema(schema);
+            const next = withRoles(normalizeSchema(schema));
             const ids = new Set(next.entities.map((e) => e.id));
             const seeds = Object.fromEntries(Object.entries(s.seeds).filter(([id]) => ids.has(id)));
             const keepActive = s.activeEntityId && ids.has(s.activeEntityId);
             return { schema: next, seeds, activeEntityId: keepActive ? s.activeEntityId : (next.entities[0]?.id ?? null) };
           }),
+
+        addRole: (role) =>
+          set((s) => ({ schema: { ...s.schema, roles: [...(s.schema.roles ?? []), role] } })),
+
+        updateRole: (id, patch) =>
+          set((s) => ({ schema: { ...s.schema, roles: s.schema.roles?.map((r) => (r.id === id ? { ...r, ...patch, id } : r)) } })),
+
+        removeRole: (id) =>
+          set((s) => (id === CHAIR_ROLE ? s : { schema: { ...s.schema, roles: s.schema.roles?.filter((r) => r.id !== id) } })),
+
+        setRoleAccess: (roleId, entityId, level) =>
+          set((s) => ({
+            schema: {
+              ...s.schema,
+              roles: s.schema.roles?.map((r) => {
+                if (r.id !== roleId || r.id === CHAIR_ROLE) return r;
+                const access = { ...r.access };
+                if (level === r.default) delete access[entityId];
+                else access[entityId] = level;
+                return { ...r, access };
+              }),
+            },
+          })),
+
+        setEntityPublic: (entityId, isPublic) =>
+          set((s) => ({ schema: mapEntity(s.schema, entityId, (e) => ({ ...e, public: isPublic || undefined })) })),
 
         installPlugin: (idOrManifest) =>
           set((s) => {
@@ -385,7 +433,7 @@ export const useClubStore = create<ClubState>()(
         return {
           ...current,
           ...p,
-          schema: p.schema ? normalizeSchema(p.schema) : current.schema,
+          schema: p.schema ? withRoles(normalizeSchema(p.schema)) : current.schema,
           baseline: p.baseline ? { ...p.baseline, schema: normalizeSchema(p.baseline.schema) } : null,
           seeds: p.seeds ?? {},
           pluginSecrets: p.pluginSecrets ?? {},

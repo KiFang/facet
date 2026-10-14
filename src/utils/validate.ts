@@ -2,6 +2,7 @@ import type { ClubSchema, FieldType } from '@/types/schema';
 import { normalizeSchema } from '@/utils/normalize';
 import { validateManifest } from '@/plugins/runtime';
 import { BUILTIN_BY_ID } from '@/plugins/catalog';
+import { CHAIR_ROLE, isAccessLevel } from '@/utils/access';
 
 const FIELD_TYPES: FieldType[] = ['text', 'number', 'date', 'select', 'status', 'file', 'relation'];
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -10,7 +11,7 @@ const FONTS = ['inter', 'manrope', 'rubik', 'pt-serif', 'jetbrains', 'system'];
 const VIEWS = ['cards', 'table', 'kanban', 'calendar'];
 const WIDGETS = ['stats', 'upcoming', 'statuses', 'recent'];
 /** Системные имена коллекций PocketBase, которые нельзя занимать. */
-export const RESERVED_COLLECTIONS = ['users'];
+export const RESERVED_COLLECTIONS = ['users', 'staff'];
 /** Системные имена полей PocketBase. */
 export const RESERVED_FIELDS = ['id', 'created', 'updated', 'collectionId', 'collectionName', 'expand'];
 const MAX_LOGO = 400_000;
@@ -50,6 +51,23 @@ export function validateSchema(input: unknown): ValidationResult {
           else validateManifest(p.manifest).errors.forEach((err) => errors.push(`plugins[${i}].manifest.${err}`));
         }
       });
+  }
+
+  if (s.roles !== undefined) {
+    if (!Array.isArray(s.roles)) errors.push('roles: массив');
+    else {
+      const ids = new Set<string>();
+      s.roles.forEach((r, i) => {
+        if (!isObj(r) || typeof r.id !== 'string' || !ID.test(r.id)) return errors.push(`roles[${i}].id: латиница, цифры и _`);
+        if (ids.has(r.id)) errors.push(`roles[${i}].id: «${r.id}» повторяется`);
+        ids.add(r.id);
+        if (typeof r.name !== 'string' || !r.name.trim()) errors.push(`roles[${i}].name: непустая строка`);
+        if (!isAccessLevel(r.default)) errors.push(`roles[${i}].default: none | read | write`);
+        if (r.access !== undefined && (!isObj(r.access) || Object.values(r.access).some((v) => !isAccessLevel(v))))
+          errors.push(`roles[${i}].access: { раздел: none | read | write }`);
+      });
+      if (s.roles.length && !ids.has(CHAIR_ROLE)) errors.push(`roles: нужна роль «${CHAIR_ROLE}» (председатель)`);
+    }
   }
 
   const t = s.theme;

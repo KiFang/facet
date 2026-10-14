@@ -92,6 +92,24 @@ export interface ClubEntity {
   relations: EntityRelation[];
   /** Вид раздела в портале. По умолчанию — карточки. */
   view?: EntityView;
+  /** Раздел виден без входа (например, афиша мероприятий). По умолчанию — только для актива. */
+  public?: boolean;
+}
+
+/** Уровень доступа роли к разделу. */
+export type AccessLevel = 'none' | 'read' | 'write';
+
+/** Роль в активе клуба: председатель, казначей, завхоз… */
+export interface ClubRole {
+  /** Латиница; хранится в учётной записи сотрудника. `chair` — председатель, всегда есть. */
+  id: string;
+  name: string;
+  /** Доступ к разделам, для которых не задано отдельно. */
+  default: AccessLevel;
+  /** Доступ по разделам (ключ — id раздела). */
+  access?: Record<string, AccessLevel>;
+  /** Может добавлять сотрудников и назначать роли. */
+  manageStaff?: boolean;
 }
 
 export type DashboardWidget = 'stats' | 'upcoming' | 'statuses' | 'recent';
@@ -113,6 +131,11 @@ export interface ClubSchema {
   dashboard?: DashboardConfig;
   /** Подключённые плагины (без секретов — они только в .env сервера). */
   plugins?: InstalledPlugin[];
+  /**
+   * Роли актива. Нет поля — схема старой версии: все разделы публичны на чтение,
+   * правка только через панель PocketBase (так считается и версия на сервере).
+   */
+  roles?: ClubRole[];
 }
 
 export const DEFAULT_DASHBOARD: DashboardConfig = { enabled: true, widgets: ['stats', 'upcoming', 'statuses', 'recent'] };

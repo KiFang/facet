@@ -2,6 +2,7 @@ import { useClubStore } from '@/store/useClubStore';
 import { useWorkbench } from '@/store/useWorkbench';
 import type { Command } from '@/lib/commands';
 import { EntityProperties } from './EntityProperties';
+import { RolesProperties } from './RolesProperties';
 import { AppearanceProperties, ClubProperties, HomeProperties, PluginsProperties, PublishProperties } from './OtherProperties';
 
 /** Правая панель: свойства выбранного в навигаторе объекта. */
@@ -19,6 +20,8 @@ export function PropertiesPanel({ commands }: { commands: Command[] }) {
       return <HomeProperties />;
     case 'plugins':
       return <PluginsProperties />;
+    case 'roles':
+      return <RolesProperties />;
     case 'publish':
       return <PublishProperties commands={commands} />;
     default:

@@ -1,5 +1,6 @@
 import { keyOf, type ClubEntity, type ClubSchema, type EntityField } from '@/types/schema';
 import { resolveRelations } from '@/utils/relations';
+import { entityRules, staffRules, STAFF_COLLECTION, type CollectionRules } from '@/utils/access';
 
 /**
  * «Физическая» модель базы PocketBase, которую порождает схема клуба.
@@ -26,7 +27,13 @@ export interface PhysCollection {
   key: string;
   name: string;
   fields: PhysField[];
+  /** Коллекция учётных записей (вход по email и паролю). */
+  auth?: boolean;
+  rules: CollectionRules;
 }
+
+/** Ключ коллекции сотрудников — не пересекается с ключами разделов. */
+export const STAFF_KEY = 'sys:staff';
 
 export type PhysModel = PhysCollection[];
 
@@ -54,7 +61,7 @@ function physField(field: EntityField): PhysField | null {
 
 export function toPhysical(schema: ClubSchema): PhysModel {
   const keyById = new Map(schema.entities.map((e) => [e.id, keyOf(e)]));
-  return schema.entities.map((entity: ClubEntity) => {
+  const model: PhysModel = schema.entities.map((entity: ClubEntity) => {
     const fields = entity.fields.map(physField).filter((f): f is PhysField => f !== null);
     for (const rel of resolveRelations(entity, schema)) {
       const sourceField = entity.fields.find((f) => f.type === 'relation' && f.id === rel.name);
@@ -68,6 +75,19 @@ export function toPhysical(schema: ClubSchema): PhysModel {
         maxSelect: rel.multiple ? MULTI_RELATION_MAX : 1,
       });
     }
-    return { key: keyOf(entity), name: entity.id, fields };
+    return { key: keyOf(entity), name: entity.id, fields, rules: entityRules(schema, entity) };
   });
+  if (schema.roles?.length) {
+    model.push({
+      key: STAFF_KEY,
+      name: STAFF_COLLECTION,
+      auth: true,
+      fields: [
+        { key: `${STAFF_KEY}:name`, name: 'name', type: 'text', required: false },
+        { key: `${STAFF_KEY}:role`, name: 'role', type: 'select', required: true, maxSelect: 1, values: schema.roles.map((r) => r.id) },
+      ],
+      rules: staffRules(schema),
+    });
+  }
+  return model;
 }

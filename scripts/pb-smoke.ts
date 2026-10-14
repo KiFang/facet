@@ -125,7 +125,7 @@ async function checkStructure(s: Server, schema: ClubSchema) {
     const extra = col.fields.filter((f: any) => !f.system && !['id', 'created', 'updated'].includes(f.name) && !pc.fields.some((pf) => pf.name === f.name));
     check(!extra.length, `  ${pc.name}: нет лишних полей${extra.length ? ` (${extra.map((f: any) => f.name).join(', ')})` : ''}`);
   }
-  const stale = cols.filter((c) => !c.system && c.name !== 'users' && !schema.entities.some((e) => e.id === c.name));
+  const stale = cols.filter((c) => !c.system && !['users', 'staff'].includes(c.name) && !schema.entities.some((e) => e.id === c.name));
   check(!stale.length, `нет лишних коллекций${stale.length ? ` (${stale.map((c) => c.name).join(', ')})` : ''}`);
 }
 
@@ -383,11 +383,122 @@ async function dataEditor() {
   }
 }
 
+async function asUser(s: Server, collection: string, email: string, password: string): Promise<Server> {
+  const res = await fetch(`${s.url}/api/collections/${collection}/auth-with-password`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ identity: email, password }),
+  }).then((r) => r.json() as Promise<{ token?: string; message?: string }>);
+  if (!res.token) throw new Error(`вход ${email}: ${res.message}`);
+  return { ...s, token: res.token };
+}
+
+async function applyUpdate(root: string, data: string, base: ClubSchema, next: ClubSchema, name: string) {
+  const bundle = await buildUpdateBundle({ schema: base, raw: generateSchemaJson(base), source: 'file', at: '' }, next, {});
+  const updateRoot = writeBundle(bundle, path.join(WORK, name));
+  const dir = path.join(updateRoot, 'payload/pocketbase/pb_migrations');
+  for (const f of fs.readdirSync(dir)) fs.copyFileSync(path.join(dir, f), path.join(root, 'pocketbase/pb_migrations', f));
+  fs.copyFileSync(path.join(updateRoot, 'payload/club-schema.json'), path.join(root, 'club-schema.json'));
+  migrate(root, data);
+  return bundle;
+}
+
+async function roles() {
+  console.log('\n▶ Роли актива и доступ по логину');
+  // Система старой версии: без ролей, всё публично на чтение.
+  const legacy = normalizeSchema({ ...buildPresetSchema('general'), editorMode: 'pro' });
+  const { root, data } = install(await buildInstallBundle(legacy, {}, { password: PASSWORD }), 'roles');
+  let s = await serve(root, data);
+  const adminEmail = env(root).PB_ADMIN_EMAIL!;
+  await api(s, 'POST', '/api/collections/events/records', { title: 'Кикофф', starts_at: '2026-10-20 18:00:00.000Z', status: 'Запланировано' });
+  check((await api<{ items: unknown[] }>(s, 'GET', '/api/collections/events/records', undefined, true)).data.items.length === 1, 'до обновления: аноним читает');
+  s.proc.kill();
+
+  // Обновление до модели с ролями — теми же действиями, что в редакторе.
+  useClubStore.getState().replaceSchema(legacy);
+  const a = useClubStore.getState();
+  a.setRoleAccess('organizer', 'events', 'write');
+  a.setRoleAccess('treasurer', 'inventory', 'none');
+  const next = useClubStore.getState().schema;
+  check(next.roles?.some((r) => r.id === 'chair'), 'в рабочей схеме появились роли');
+  let bundle;
+  try {
+    bundle = await applyUpdate(root, data, legacy, next, 'roles-update');
+    check(true, 'миграция с ролями применилась');
+  } catch (err) {
+    check(false, `миграция с ролями упала: ${(err as { stderr?: Buffer }).stderr?.toString() ?? err}`);
+    return;
+  }
+  const kinds = bundle.diff.changes.map((c) => c.kind);
+  check(kinds.includes('staff-enabled') && kinds.filter((k) => k === 'access-private').length === next.entities.length, `diff: вход для актива и закрытие разделов (${kinds.join(', ')})`);
+
+  s = await serve(root, data);
+  try {
+    await checkStructure(s, next);
+    const anon = await api<{ items: unknown[] }>(s, 'GET', '/api/collections/events/records', undefined, true);
+    check(anon.status !== 200 || anon.data.items.length === 0, 'после обновления: аноним не видит записи');
+    const chair = await asUser(s, 'staff', adminEmail, PASSWORD);
+    check(true, 'председатель входит с данными администратора из .env');
+    const me = (await api<{ items: any[] }>(chair, 'GET', '/api/collections/staff/records')).data.items;
+    check(me.length === 1 && me[0].role === 'chair', 'учётная запись председателя создана');
+    check((await api<{ items: unknown[] }>(chair, 'GET', '/api/collections/events/records')).data.items.length === 1, 'председатель читает разделы');
+
+    const mk = async (email: string, role: string) =>
+      api(chair, 'POST', '/api/collections/staff/records', { email, password: 'staff-pass-123', passwordConfirm: 'staff-pass-123', name: email, role });
+    const mkRes = await mk('kazna@club.test', 'treasurer');
+    check(mkRes.status === 200, `председатель добавляет казначея ${mkRes.status === 200 ? '' : JSON.stringify(mkRes.data)}`);
+    check((await mk('org@club.test', 'organizer')).status === 200, 'председатель добавляет организатора');
+    const treasurer = await asUser(s, 'staff', 'kazna@club.test', 'staff-pass-123');
+    const organizer = await asUser(s, 'staff', 'org@club.test', 'staff-pass-123');
+
+    check((await api<{ items: unknown[] }>(treasurer, 'GET', '/api/collections/events/records')).data.items.length === 1, 'казначей видит мероприятия (просмотр)');
+    check((await api(treasurer, 'POST', '/api/collections/events/records', { title: 'X', starts_at: '2026-10-21 18:00:00.000Z', status: 'Запланировано' })).status >= 400, 'казначей не может создавать мероприятия');
+    const inv = await api<{ items: unknown[] }>(treasurer, 'GET', '/api/collections/inventory/records');
+    check(inv.status !== 200 || inv.data.items.length === 0, 'казначею закрыт инвентарь');
+    const created = await api<any>(organizer, 'POST', '/api/collections/events/records', { title: 'Квиз', starts_at: '2026-10-22 18:00:00.000Z', status: 'Запланировано' });
+    check(created.status === 200, 'организатор создаёт мероприятия');
+    check((await api(organizer, 'POST', '/api/collections/staff/records', { email: 'x@club.test', password: 'staff-pass-123', passwordConfirm: 'staff-pass-123', role: 'chair' })).status >= 400, 'организатор не может добавлять сотрудников');
+    const tId = (await api<{ items: any[] }>(treasurer, 'GET', '/api/collections/staff/records')).data.items.find((x) => x.email === 'kazna@club.test' || x.name === 'kazna@club.test')?.id;
+    check((await api(treasurer, 'PATCH', `/api/collections/staff/records/${tId}`, { role: 'chair' })).status >= 400, 'сотрудник не может сам повысить себе роль');
+    check((await api(treasurer, 'PATCH', `/api/collections/staff/records/${tId}`, { name: 'Казначей Катя' })).status === 200, 'сотрудник меняет своё имя');
+  } finally {
+    s.proc.kill();
+  }
+
+  // Публичный раздел (афиша) — виден без входа.
+  useClubStore.getState().setEntityPublic('events', true);
+  const pub = useClubStore.getState().schema;
+  const b2 = await applyUpdate(root, data, next, pub, 'roles-public');
+  check(b2.diff.changes.some((c) => c.kind === 'access-public' && c.collection === 'events'), 'diff: раздел стал публичным');
+  s = await serve(root, data);
+  try {
+    check((await api<{ items: unknown[] }>(s, 'GET', '/api/collections/events/records', undefined, true)).data.items.length === 2, 'аноним видит публичный раздел');
+    check((await api(s, 'POST', '/api/collections/events/records', { title: 'Y' }, true)).status >= 400, 'но не может в него писать');
+  } finally {
+    s.proc.kill();
+  }
+
+  // Новая установка с ролями сразу.
+  const fresh = useClubStore.getState().schema;
+  const f = install(await buildInstallBundle(fresh, {}, { password: PASSWORD }), 'roles-fresh');
+  s = await serve(f.root, f.data);
+  try {
+    await checkStructure(s, fresh);
+    await asUser(s, 'staff', env(f.root).PB_ADMIN_EMAIL!, PASSWORD);
+    check(true, 'новая установка: председатель входит');
+  } catch (err) {
+    check(false, `новая установка с ролями: ${err}`);
+  } finally {
+    s.proc.kill();
+  }
+}
+
 try {
   await presets();
   await update();
   await plugins();
   await dataEditor();
+  await roles();
 } catch (err) {
   failures++;
   console.error(err);

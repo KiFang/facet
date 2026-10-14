@@ -1,5 +1,5 @@
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import { ArrowDown, ArrowUp, Database, FileSpreadsheet, Home, Palette, Plug, Plus, Rocket, Settings2, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Database, FileSpreadsheet, Home, Palette, Plug, Plus, Rocket, Settings2, ShieldCheck, Trash2 } from 'lucide-react';
 import { useClubStore } from '@/store/useClubStore';
 import { useSettings } from '@/store/useSettings';
 import { useWorkbench, type Selection } from '@/store/useWorkbench';
@@ -56,6 +56,7 @@ export function Navigator() {
   const open = useWorkbench((s) => s.open);
   const select = useWorkbench((s) => s.select);
   const plugins = (schema.plugins ?? []).filter((p) => p.enabled).length;
+  const roles = schema.roles?.length ?? 0;
 
   const remove = (id: string, name: string) => {
     if (useSettings.getState().confirmDeletes && !window.confirm(t('confirm.deleteModule', { name }))) return;
@@ -131,6 +132,7 @@ export function Navigator() {
         )}
 
         <GroupHeader>{t('nav.system')}</GroupHeader>
+        <Row selection={{ kind: 'roles' }} icon={<ShieldCheck className="h-3.5 w-3.5" />} label={t('nav.roles')} meta={roles || undefined} testId="nav-roles" />
         <Row selection={{ kind: 'plugins' }} icon={<Plug className="h-3.5 w-3.5" />} label={t('nav.plugins')} meta={plugins || undefined} testId="nav-plugins" />
         <Row selection={{ kind: 'publish' }} icon={<Rocket className="h-3.5 w-3.5" />} label={t('nav.publish')} testId="nav-publish" />
       </div>

@@ -1,4 +1,5 @@
-import type { PbFieldType, PhysCollection, PhysField, PhysModel } from './physical';
+import { CHAIR_ROLE, type CollectionRules } from '@/utils/access';
+import { STAFF_KEY, type PbFieldType, type PhysCollection, type PhysField, type PhysModel } from './physical';
 
 /**
  * Операции миграции. Поля связей ссылаются на целевую коллекцию по ИТОГОВОМУ имени —
@@ -15,13 +16,17 @@ export interface MigrationField {
 }
 
 export type MigrationOp =
-  | { op: 'createCollection'; name: string; fields: MigrationField[] }
+  | { op: 'createCollection'; name: string; fields: MigrationField[]; auth?: boolean }
   | { op: 'deleteCollection'; name: string }
   | { op: 'renameCollection'; from: string; to: string }
   | { op: 'addField'; collection: string; field: MigrationField }
   | { op: 'removeField'; collection: string; name: string }
   | { op: 'renameField'; collection: string; from: string; to: string }
-  | { op: 'updateField'; collection: string; name: string; patch: Partial<Pick<MigrationField, 'required' | 'values' | 'maxSelect'>> };
+  | { op: 'updateField'; collection: string; name: string; patch: Partial<Pick<MigrationField, 'required' | 'values' | 'maxSelect'>> }
+  /** Правила доступа API. Ставятся последними: могут ссылаться на поля и коллекцию сотрудников. */
+  | { op: 'setRules'; collection: string; rules: CollectionRules }
+  /** Первая учётная запись актива (председатель) из PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD. */
+  | { op: 'bootstrapStaff'; collection: string; role: string };
 
 export type ChangeSeverity = 'safe' | 'warning' | 'danger';
 
@@ -31,7 +36,8 @@ export interface SchemaChange {
   kind:
     | 'collection-added' | 'collection-removed' | 'collection-renamed'
     | 'field-added' | 'field-removed' | 'field-renamed' | 'field-recreated'
-    | 'field-required' | 'field-values-removed' | 'field-values-added' | 'relation-narrowed' | 'relation-widened';
+    | 'field-required' | 'field-values-removed' | 'field-values-added' | 'relation-narrowed' | 'relation-widened'
+    | 'staff-enabled' | 'access-private' | 'access-public' | 'access-changed';
   collection: string;
   field?: string;
   from?: string;
@@ -86,6 +92,9 @@ export function diffPhysical(before: PhysModel, after: PhysModel): SchemaDiff {
   const updateFields: MigrationOp[] = [];
   const addPlain: MigrationOp[] = [];
   const addRel: MigrationOp[] = [];
+  const setRules: MigrationOp[] = [];
+  const bootstrap: MigrationOp[] = [];
+  const sameRules = (a?: CollectionRules, b?: CollectionRules) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
   const queueRemove = (collection: string, f: PhysField) =>
     (f.type === 'relation' ? removeRel : removePlain).push({ op: 'removeField', collection, name: f.name });
@@ -103,9 +112,15 @@ export function diffPhysical(before: PhysModel, after: PhysModel): SchemaDiff {
   for (const col of after) {
     if (beforeByKey.has(col.key)) continue;
     const plain = col.fields.filter((f) => f.type !== 'relation');
-    createCols.push({ op: 'createCollection', name: col.name, fields: plain.map((f) => toMigrationField(f, afterNameByKey)) });
+    createCols.push({
+      op: 'createCollection', name: col.name, fields: plain.map((f) => toMigrationField(f, afterNameByKey)), ...(col.auth ? { auth: true } : {}),
+    });
     col.fields.filter((f) => f.type === 'relation').forEach((f) => queueAdd(col.name, f));
-    changes.push({ severity: 'safe', kind: 'collection-added', collection: col.name });
+    setRules.push({ op: 'setRules', collection: col.name, rules: col.rules });
+    if (col.key === STAFF_KEY) bootstrap.push({ op: 'bootstrapStaff', collection: col.name, role: CHAIR_ROLE });
+    changes.push(col.key === STAFF_KEY
+      ? { severity: 'safe', kind: 'staff-enabled', collection: col.name }
+      : { severity: 'safe', kind: 'collection-added', collection: col.name });
   }
 
   // Общие коллекции.
@@ -118,6 +133,15 @@ export function diffPhysical(before: PhysModel, after: PhysModel): SchemaDiff {
       changes.push({ severity: 'safe', kind: 'collection-renamed', collection: next.name, from: prev.name, to: next.name });
     }
     diffFields(prev, next);
+    if (!sameRules(prev.rules, next.rules)) {
+      setRules.push({ op: 'setRules', collection: next.name, rules: next.rules });
+      if (next.key === STAFF_KEY) continue;
+      const wasPublic = prev.rules?.listRule === '';
+      const isPublic = next.rules.listRule === '';
+      if (wasPublic && !isPublic) changes.push({ severity: 'warning', kind: 'access-private', collection: next.name });
+      else if (!wasPublic && isPublic) changes.push({ severity: 'safe', kind: 'access-public', collection: next.name });
+      else changes.push({ severity: 'safe', kind: 'access-changed', collection: next.name });
+    }
   }
 
   function diffFields(prev: PhysCollection, next: PhysCollection) {
@@ -181,6 +205,7 @@ export function diffPhysical(before: PhysModel, after: PhysModel): SchemaDiff {
       ...createCols,
       ...renameFieldsTmp, ...renameFieldsFinal,
       ...updateFields, ...addPlain, ...addRel,
+      ...setRules, ...bootstrap,
     ],
     changes,
   };
