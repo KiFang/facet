@@ -1,0 +1,6 @@
+# Facet OS — HTTPS-шлюз. Сертификат Let's Encrypt выпускается автоматически.
+# Включается в .env: DOMAIN=club.example.ru и COMPOSE_PROFILES=https
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:80
+}

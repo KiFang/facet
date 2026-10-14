@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PB_VERSION: 0.25.9
+
+jobs:
+  check:
+    name: Typecheck · unit · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc -b
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    name: Editor e2e (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  pocketbase:
+    name: Migrations on real PocketBase
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Download PocketBase
+        run: |
+          curl -fsSL -o pb.zip "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip"
+          unzip -q pb.zip pocketbase -d pb
+      - run: npm run smoke:pb -- --pb ./pb/pocketbase
+
+  desktop:
+    name: Desktop app (Linux, unpackaged)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/fetch-pocketbase.mjs linux-x64
+      - run: npm run build
+      - run: sudo apt-get update && sudo apt-get install -y xvfb
+      - run: xvfb-run -a npm run test:desktop
+
+  docker:
+    name: Self-host bundle in Docker
+    runs-on: ubuntu-latest
+    needs: check
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Export install bundle
+        run: |
+          npm run export -- --preset general --out ./out --password ci-password-12345
+          echo "PORTAL=$(pwd)/out/gildiya-severnogo-kampusa-portal" >> "$GITHUB_ENV"
+
+      - name: install.sh (no domain, non-interactive)
+        run: |
+          cd "$PORTAL"
+          ./install.sh < /dev/null
+          docker compose ps
+
+      - name: Portal, headers and API through Nginx
+        run: |
+          set -eux
+          B=http://127.0.0.1:8080
+          curl -fsS "$B/" | grep -q '/portal.js'
+          curl -fsS "$B/portal.js" -o /dev/null
+          curl -fsS "$B/club-schema.json" | grep -q '"clubName"'
+          curl -fsS "$B/api/health" | grep -q '"code":200'
+          curl -sSI "$B/" | grep -qi "content-security-policy: default-src 'self'"
+          curl -sSI "$B/" | grep -qi 'x-frame-options: SAMEORIGIN'
+          curl -sSI "$B/" | grep -qi 'x-content-type-options: nosniff'
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$B/api/collections/events/records")" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{}' "$B/api/collections/events/records")" = 403
+
+      - name: Superuser from .env, hooks applied, seed a record
+        run: |
+          set -eux
+          B=http://127.0.0.1:8080
+          TOKEN=$(curl -fsS -X POST -H 'content-type: application/json' \
+            -d '{"identity":"admin@gildiya-severnogo-kampusa.club","password":"ci-password-12345"}' \
+            "$B/api/collections/_superusers/auth-with-password" | jq -r .token)
+          echo "TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          curl -fsS -H "Authorization: $TOKEN" "$B/api/settings" | jq -e '.backups.cron == "0 3 * * *" and .meta.appName == "Гильдия Северного кампуса"'
+          curl -fsS -X POST -H "Authorization: $TOKEN" -H 'content-type: application/json' \
+            -d '{"full_name":"Аня","role":"Президент"}' "$B/api/collections/members/records" | jq -e '.id'
+
+      - name: backup.sh / restore.sh
+        run: |
+          set -eux
+          cd "$PORTAL"
+          ./backup.sh
+          ARCHIVE=$(ls backups/pb_data-*.tar.gz | head -1)
+          YES=1 ./restore.sh "$ARCHIVE"
+          curl -fsS "http://127.0.0.1:8080/api/collections/members/records" | jq -e '.totalItems == 1'
+
+      - name: Wrong base is rejected
+        run: |
+          set -eux
+          node scripts/ci-mutate-schema.mjs "$PORTAL/club-schema.json" next.json
+          npm run export -- --schema next.json --base next.json --out ./wrong
+          set +e
+          YES=1 ./wrong/*-update-*/apply-update.sh "$PORTAL"
+          test $? -eq 2
+
+      - name: apply-update.sh keeps data
+        run: |
+          set -eux
+          npm run export -- --schema next.json --base "$PORTAL/club-schema.json" --out ./update
+          YES=1 ./update/*-update-*/apply-update.sh "$PORTAL"
+          B=http://127.0.0.1:8080
+          curl -fsS "$B/api/collections/members/records" | jq -e '.items[0].name == "Аня" and (.items[0] | has("email"))'
+          curl -fsS "$B/club-schema.json" | jq -e '.clubName | endswith("v2")'
+          ls -d "$PORTAL"/backups/update-*
+          # Переименование клуба не должно создавать новый пустой том с базой.
+          test "$(docker volume ls --format '{{.Name}}' | grep -c '_pb_data$')" = 1
+
+      - name: restore.sh rolls the update back
+        run: |
+          set -eux
+          cd "$PORTAL"
+          YES=1 ./restore.sh "$(ls -d backups/update-* | head -1)"
+          curl -fsS "http://127.0.0.1:8080/api/collections/members/records" | jq -e '.items[0].full_name == "Аня" and (.items[0] | has("email") | not)'
+          curl -fsS "http://127.0.0.1:8080/club-schema.json" | jq -e '.clubName | endswith("v2") | not'
+
+      - name: Login rate limit
+        run: |
+          CODES=""
+          for i in $(seq 1 15); do
+            CODES="$CODES $(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' \
+              -d '{"identity":"x@y.z","password":"wrong-password"}' \
+              http://127.0.0.1:8080/api/collections/_superusers/auth-with-password)"
+          done
+          echo "$CODES"
+          echo "$CODES" | grep -q 429
+
+      - name: Logs on failure
+        if: failure()
+        run: cd "$PORTAL" && docker compose logs --no-color | tail -200

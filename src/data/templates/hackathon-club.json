@@ -1,0 +1,66 @@
+{
+  "meta": {
+    "title": "Хакатон-клуб",
+    "description": "Хакатоны, команды, проекты и менторы",
+    "icon": "Target",
+    "author": "Facet OS"
+  },
+  "schema": {
+    "clubName": "Хакатон-клуб «Коммит»",
+    "motto": "48 часов до прода",
+    "locale": "ru",
+    "theme": {
+      "borderRadius": 10,
+      "borderWidth": 1,
+      "shadowIntensity": "soft",
+      "dividerStyle": "solid",
+      "density": "compact",
+      "font": "jetbrains",
+      "colors": { "primary": "#16a34a", "background": "#0c1210", "surface": "#141c19", "accent": "#facc15", "text": "#e3f1ea" }
+    },
+    "dashboard": { "enabled": true, "widgets": ["stats", "upcoming", "statuses", "recent"] },
+    "entities": [
+      {
+        "id": "hackathons", "name": "Хакатон", "pluralName": "Хакатоны", "icon": "Target",
+        "view": { "type": "calendar", "dateField": "starts_at" },
+        "fields": [
+          { "id": "title", "name": "Название", "type": "text", "required": true },
+          { "id": "starts_at", "name": "Старт", "type": "date", "required": true },
+          { "id": "format", "name": "Формат", "type": "select", "required": true, "options": ["Онлайн", "Офлайн", "Гибрид"] },
+          { "id": "status", "name": "Статус", "type": "status", "required": true, "options": ["Регистрация", "Идёт", "Итоги", "Завершён"] }
+        ],
+        "relations": [{ "targetEntityId": "teams", "type": "many-to-many" }]
+      },
+      {
+        "id": "teams", "name": "Команда", "pluralName": "Команды", "icon": "Users",
+        "view": { "type": "table" },
+        "fields": [
+          { "id": "name", "name": "Название", "type": "text", "required": true },
+          { "id": "captain", "name": "Капитан", "type": "text", "required": false },
+          { "id": "place", "name": "Место", "type": "number", "required": false }
+        ],
+        "relations": []
+      },
+      {
+        "id": "projects", "name": "Проект", "pluralName": "Проекты", "icon": "Puzzle",
+        "view": { "type": "kanban", "groupBy": "stage" },
+        "fields": [
+          { "id": "title", "name": "Проект", "type": "text", "required": true },
+          { "id": "stage", "name": "Этап", "type": "status", "required": true, "options": ["Идея", "Прототип", "Демо", "Продакшен"] },
+          { "id": "repo", "name": "Репозиторий", "type": "text", "required": false },
+          { "id": "team", "name": "Команда", "type": "relation", "required": false, "targetEntityId": "teams" }
+        ],
+        "relations": [{ "targetEntityId": "mentors", "type": "many-to-many" }]
+      },
+      {
+        "id": "mentors", "name": "Ментор", "pluralName": "Менторы", "icon": "Award",
+        "fields": [
+          { "id": "full_name", "name": "Имя", "type": "text", "required": true },
+          { "id": "stack", "name": "Стек", "type": "text", "required": false },
+          { "id": "telegram", "name": "Telegram", "type": "text", "required": false }
+        ],
+        "relations": []
+      }
+    ]
+  }
+}

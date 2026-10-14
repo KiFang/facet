@@ -1,0 +1,63 @@
+{
+  "name": "facet-os",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Facet OS — visual no-code builder of self-hosted portals for student clubs and guilds",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "smoke:pb": "vite-node scripts/pb-smoke.ts --",
+    "export": "vite-node scripts/facet-export.ts --",
+    "desktop": "npm run build && electron .",
+    "desktop:dev": "FACET_DEV_URL=http://127.0.0.1:5173 electron .",
+    "desktop:dist": "npm run build && electron-builder",
+    "test:desktop": "playwright test --config playwright.desktop.config.ts"
+  },
+  "dependencies": {
+    "@radix-ui/react-accordion": "^1.2.2",
+    "@radix-ui/react-dialog": "^1.1.4",
+    "@radix-ui/react-slider": "^1.2.2",
+    "@radix-ui/react-switch": "^1.1.2",
+    "@radix-ui/react-tabs": "^1.1.2",
+    "@radix-ui/react-toggle-group": "^1.1.1",
+    "clsx": "^2.1.1",
+    "file-saver": "^2.0.5",
+    "jszip": "^3.10.1",
+    "lucide": "^0.468.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.6.0",
+    "zundo": "^2.3.0",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/file-saver": "^2.0.7",
+    "@types/node": "^22.20.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.25.12",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.6.3",
+    "vite": "^6.0.7",
+    "vitest": "^3.2.7"
+  },
+  "main": "desktop/main.cjs",
+  "author": {
+    "name": "Facet OS contributors",
+    "email": "noreply@facet.os"
+  },
+  "homepage": "https://github.com/KiFang/facet",
+  "desktopName": "facet-os.desktop"
+}

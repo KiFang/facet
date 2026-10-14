@@ -1,0 +1,9 @@
+node_modules
+dist
+*.local
+.DS_Store
+*.tsbuildinfo
+test-results
+playwright-report
+release
+desktop/bin
