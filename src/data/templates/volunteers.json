@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "title": "Волонтёрский отряд",
+    "description": "Акции, смены, волонтёры, часы и снаряжение",
+    "icon": "Heart",
+    "author": "Facet OS"
+  },
+  "schema": {
+    "clubName": "Волонтёрский отряд «Рядом»",
+    "motto": "Помогаем тем, кто рядом",
+    "locale": "ru",
+    "theme": {
+      "borderRadius": 18,
+      "borderWidth": 1,
+      "shadowIntensity": "medium",
+      "dividerStyle": "gradient",
+      "density": "comfortable",
+      "font": "manrope",
+      "colors": { "primary": "#e11d48", "background": "#fff5f5", "surface": "#ffffff", "accent": "#fb923c", "text": "#3a1220" }
+    },
+    "dashboard": { "enabled": true, "widgets": ["upcoming", "stats", "statuses", "recent"] },
+    "entities": [
+      {
+        "id": "actions", "name": "Акция", "pluralName": "Акции", "icon": "Megaphone",
+        "view": { "type": "calendar", "dateField": "date" },
+        "fields": [
+          { "id": "title", "name": "Акция", "type": "text", "required": true },
+          { "id": "date", "name": "Дата", "type": "date", "required": true },
+          { "id": "place", "name": "Место", "type": "text", "required": false },
+          { "id": "needed", "name": "Нужно волонтёров", "type": "number", "required": false },
+          { "id": "status", "name": "Статус", "type": "status", "required": true, "options": ["Набор", "Готово", "Проведено", "Отменено"] }
+        ],
+        "relations": [{ "targetEntityId": "volunteers", "type": "many-to-many" }]
+      },
+      {
+        "id": "volunteers", "name": "Волонтёр", "pluralName": "Волонтёры", "icon": "Users",
+        "view": { "type": "table" },
+        "fields": [
+          { "id": "full_name", "name": "Имя", "type": "text", "required": true },
+          { "id": "phone", "name": "Телефон", "type": "text", "required": false },
+          { "id": "hours", "name": "Часов", "type": "number", "required": false },
+          { "id": "level", "name": "Статус", "type": "select", "required": false, "options": ["Новичок", "Опытный", "Координатор"] }
+        ],
+        "relations": []
+      },
+      {
+        "id": "equipment", "name": "Снаряжение", "pluralName": "Снаряжение", "icon": "Package",
+        "fields": [
+          { "id": "item", "name": "Предмет", "type": "text", "required": true },
+          { "id": "quantity", "name": "Количество", "type": "number", "required": true },
+          { "id": "state", "name": "Состояние", "type": "status", "required": true, "options": ["На складе", "Выдано", "Требует ремонта"] },
+          { "id": "holder", "name": "У кого", "type": "relation", "required": false, "targetEntityId": "volunteers" }
+        ],
+        "relations": []
+      }
+    ]
+  }
+}

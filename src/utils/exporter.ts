@@ -1,37 +1,105 @@
-import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
-import type { ClubEntity, ClubSchema, EntityField } from '@/types/schema';
-import { slugify } from '@/lib/id';
-import { resolveRelations } from '@/utils/relations';
-import { cssVarsToText, dividerCss, themeToCssVars } from '@/utils/theme';
+import portalJs from 'virtual:facet-portal';
+import portalBaseCss from '@/portal/portal.css?raw';
 import nginxConf from '@/export-templates/nginx.conf?raw';
+import nginxProxy from '@/export-templates/nginx-proxy.conf?raw';
+import nginxHeaders from '@/export-templates/nginx-headers.conf?raw';
+import nginxCsp from '@/export-templates/nginx-csp.conf?raw';
+import caddyfile from '@/export-templates/Caddyfile?raw';
 import pocketbaseDockerfile from '@/export-templates/Dockerfile?raw';
+import pbHooks from '@/export-templates/facet.pb.js?raw';
 import superuserMigration from '@/export-templates/superuser-migration.js?raw';
-import portalBaseCss from '@/export-templates/portal.base.css?raw';
-import portalJs from '@/export-templates/portal.js?raw';
+import installSh from '@/export-templates/install.sh?raw';
+import backupSh from '@/export-templates/backup.sh?raw';
+import restoreSh from '@/export-templates/restore.sh?raw';
+import applyUpdateSh from '@/export-templates/apply-update.sh?raw';
+import type { ClubSchema } from '@/types/schema';
+import type { Baseline, SeedBatch } from '@/store/useClubStore';
+import { slugify } from '@/lib/id';
+import { generateSchemaJson } from '@/utils/schemaJson';
+import { resolveRelations } from '@/utils/relations';
+import { cssVarsToText, dividerCss, fontStylesheetUrl, themeToCssVars } from '@/utils/theme';
+import { planMigration, renderMigrationFile } from '@/utils/migrations/generate';
+import { buildSeedOp, orderSeedOps } from '@/utils/migrations/seeds';
+import { describeChange, SEVERITY_MARK } from '@/utils/migrations/describe';
+import type { SchemaDiff } from '@/utils/migrations/diff';
+
+export const FACET_VERSION = '0.2.0';
+export const PB_VERSION = '0.25.9';
 
 export interface ExportFile {
   path: string;
   content: string;
   /** Короткое пояснение для диалога экспорта. */
   description: string;
+  /** base64 — бинарный файл (логотип). */
+  encoding?: 'base64';
+  /** Исполняемый файл (скрипты .sh). */
+  executable?: boolean;
 }
 
-export const PB_VERSION = '0.25.9';
+export interface ExportBundle {
+  kind: 'install' | 'update';
+  folder: string;
+  files: ExportFile[];
+  diff: SchemaDiff;
+  /** Сколько импортированных строк вошло в миграцию. */
+  seededRows: number;
+}
+
+export interface ExportOptions {
+  now?: Date;
+  /** Пароль администратора (по умолчанию — случайный). */
+  password?: string;
+}
+
+/* ---------------------------------- helpers --------------------------------- */
+
+export function projectSlug(schema: ClubSchema): string {
+  return slugify(schema.clubName).replace(/_/g, '-');
+}
+
+export function exportFolderName(schema: ClubSchema): string {
+  return `${projectSlug(schema)}-portal`;
+}
+
+export async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function randomPassword(length = 20): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = new Uint32Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
+}
+
+const LOGO_RE = /^data:image\/(png|webp|jpeg|svg\+xml);base64,(.+)$/;
+
+function logoFile(schema: ClubSchema): { path: string; base64: string } | null {
+  const m = schema.theme.logo ? LOGO_RE.exec(schema.theme.logo) : null;
+  if (!m) return null;
+  const ext = m[1] === 'svg+xml' ? 'svg' : m[1] === 'jpeg' ? 'jpg' : m[1];
+  return { path: `logo.${ext}`, base64: m[2] };
+}
+
+const stamp = (d: Date) =>
+  `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
 
 /* ------------------------------ club-schema.json ----------------------------- */
 
-export function generateSchemaJson(schema: ClubSchema): string {
-  return `${JSON.stringify(schema, null, 2)}\n`;
-}
+export { generateSchemaJson };
 
 /* ------------------------------ docker-compose.yml --------------------------- */
 
+/** Строка для YAML в двойных кавычках, без подстановок переменных compose. */
+const yamlString = (s: string) => JSON.stringify(s).replace(/\$/g, '$$$$');
+
 export function generateDockerCompose(schema: ClubSchema): string {
-  const project = slugify(schema.clubName).replace(/_/g, '-');
-  return `# ${schema.clubName} — self-hosted портал, собранный в Facet OS
-# Запуск: docker compose up -d   →   http://localhost:\${PORTAL_PORT:-8080}
-name: ${project}
+  return `# ${schema.clubName} — self-hosted система управления клубом, собранная в Facet OS
+# Запуск:   ./install.sh            (или: docker compose up -d --build)
+# HTTPS:    DOMAIN=club.example.ru и COMPOSE_PROFILES=https в .env
+name: ${projectSlug(schema)}
 
 services:
   pocketbase:
@@ -43,6 +111,15 @@ services:
     environment:
       PB_ADMIN_EMAIL: \${PB_ADMIN_EMAIL:?Укажите PB_ADMIN_EMAIL в .env}
       PB_ADMIN_PASSWORD: \${PB_ADMIN_PASSWORD:?Укажите PB_ADMIN_PASSWORD в .env}
+      FACET_CLUB_NAME: ${yamlString(schema.clubName)}
+      DOMAIN: \${DOMAIN:-}
+      BACKUP_CRON: \${BACKUP_CRON:-0 3 * * *}
+      BACKUP_KEEP: \${BACKUP_KEEP:-14}
+      BACKUP_S3_BUCKET: \${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_REGION: \${BACKUP_S3_REGION:-}
+      BACKUP_S3_ENDPOINT: \${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_ACCESS_KEY: \${BACKUP_S3_ACCESS_KEY:-}
+      BACKUP_S3_SECRET: \${BACKUP_S3_SECRET:-}
     volumes:
       - pb_data:/pb/pb_data
     healthcheck:
@@ -59,145 +136,81 @@ services:
       pocketbase:
         condition: service_healthy
     ports:
-      - "\${PORTAL_PORT:-8080}:80"
+      - "\${PORTAL_BIND:-0.0.0.0}:\${PORTAL_PORT:-8080}:80"
     volumes:
       - ./web:/usr/share/nginx/html:ro
       - ./club-schema.json:/usr/share/nginx/club-schema.json:ro
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  # HTTPS с автоматическим сертификатом Let's Encrypt. Включается COMPOSE_PROFILES=https.
+  caddy:
+    image: caddy:2.8-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: \${DOMAIN:-localhost}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   pb_data:
+  caddy_data:
+  caddy_config:
 `;
 }
 
 /* ----------------------------------- .env ------------------------------------ */
 
-function randomPassword(length = 20): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-  const bytes = new Uint32Array(length);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
-}
+export const ENV_DEFAULTS = `# Порт портала и интерфейс. С HTTPS ставится 127.0.0.1 — снаружи доступ только через Caddy.
+PORTAL_PORT=8080
+PORTAL_BIND=0.0.0.0
+
+# HTTPS: домен (A-запись на IP сервера) и включение Caddy.
+DOMAIN=
+COMPOSE_PROFILES=
+
+# Автоматические резервные копии PocketBase: расписание cron и сколько хранить.
+BACKUP_CRON="0 3 * * *"
+BACKUP_KEEP=14
+
+# Необязательно: выгрузка копий в S3-совместимое хранилище (Yandex Object Storage, Selectel, MinIO…).
+BACKUP_S3_BUCKET=
+BACKUP_S3_REGION=
+BACKUP_S3_ENDPOINT=
+BACKUP_S3_ACCESS_KEY=
+BACKUP_S3_SECRET=
+`;
 
 export function generateEnv(schema: ClubSchema, password = randomPassword()): string {
   return `# Секреты портала «${schema.clubName}». Не публикуйте этот файл.
-PB_ADMIN_EMAIL=admin@${slugify(schema.clubName).replace(/_/g, '-')}.club
+PB_ADMIN_EMAIL=admin@${projectSlug(schema)}.club
 PB_ADMIN_PASSWORD=${password}
-PORTAL_PORT=8080
-`;
-}
 
-/* ----------------------------- PocketBase migration -------------------------- */
-
-interface PbField {
-  name: string;
-  type: string;
-  required: boolean;
-  [key: string]: unknown;
-}
-
-function toPbField(field: EntityField): PbField | null {
-  const base = { name: field.id, required: field.required };
-  switch (field.type) {
-    case 'text':
-      return { ...base, type: 'text', max: 2000 };
-    case 'number':
-      return { ...base, type: 'number' };
-    case 'date':
-      return { ...base, type: 'date' };
-    case 'select':
-    case 'status':
-      return { ...base, type: 'select', maxSelect: 1, values: field.options?.length ? field.options : ['—'] };
-    case 'file':
-      return {
-        ...base,
-        type: 'file',
-        maxSelect: 1,
-        maxSize: 10 * 1024 * 1024,
-        mimeTypes: [],
-        thumbs: ['480x270'],
-      };
-    case 'relation':
-      return null; // создаются вторым проходом, когда известны id коллекций
-  }
-}
-
-function collectionPlan(entity: ClubEntity) {
-  return {
-    name: entity.id,
-    fields: [
-      ...entity.fields.map(toPbField).filter((f): f is PbField => f !== null),
-      { name: 'created', type: 'autodate', onCreate: true, onUpdate: false, required: false },
-      { name: 'updated', type: 'autodate', onCreate: true, onUpdate: true, required: false },
-    ],
-  };
-}
-
-export function generatePocketbaseMigration(schema: ClubSchema): string {
-  const collections = schema.entities.map(collectionPlan);
-  const relations = schema.entities.flatMap((entity) =>
-    resolveRelations(entity, schema).map((r) => ({
-      collection: entity.id,
-      name: r.name,
-      target: r.targetEntityId,
-      maxSelect: r.multiple ? 999 : 1,
-      required: r.required,
-    })),
-  );
-
-  return `/// <reference path="../pb_data/types.d.ts" />
-// Facet OS: коллекции клуба «${schema.clubName}».
-// Сгенерировано автоматически из club-schema.json — PocketBase применит миграцию при первом старте.
-// Чтение — публичное (портал), запись — только через панель управления /_/ (суперпользователи).
-
-const COLLECTIONS = ${JSON.stringify(collections, null, 2)};
-
-const RELATIONS = ${JSON.stringify(relations, null, 2)};
-
-migrate((app) => {
-  for (const def of COLLECTIONS) {
-    const collection = new Collection({
-      type: "base",
-      name: def.name,
-      listRule: "",
-      viewRule: "",
-      createRule: null,
-      updateRule: null,
-      deleteRule: null,
-      fields: def.fields,
-    });
-    app.save(collection);
-  }
-
-  for (const rel of RELATIONS) {
-    const collection = app.findCollectionByNameOrId(rel.collection);
-    const target = app.findCollectionByNameOrId(rel.target);
-    collection.fields.add(new RelationField({
-      name: rel.name,
-      required: rel.required,
-      collectionId: target.id,
-      maxSelect: rel.maxSelect,
-      cascadeDelete: false,
-    }));
-    app.save(collection);
-  }
-}, (app) => {
-  for (const def of [...COLLECTIONS].reverse()) {
-    try {
-      app.delete(app.findCollectionByNameOrId(def.name));
-    } catch (_) {
-      // коллекция уже удалена
-    }
-  }
-});
-`;
+${ENV_DEFAULTS}`;
 }
 
 /* -------------------------------------- web ---------------------------------- */
 
 export function generatePortalCss(schema: ClubSchema): string {
-  return `/* Токены темы «${schema.clubName}» — сгенерировано Facet OS */
+  return `/* Тема «${schema.clubName}» — сгенерировано Facet OS ${FACET_VERSION} */
 ${cssVarsToText(themeToCssVars(schema.theme))}
+
+html, body { margin: 0; min-height: 100%; background: var(--fx-bg); }
 
 ${dividerCss(schema.theme)}
 
@@ -206,18 +219,20 @@ ${portalBaseCss}`;
 
 export function generatePortalHtml(schema: ClubSchema): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const logo = logoFile(schema);
+  const font = fontStylesheetUrl(schema.theme.font);
   return `<!doctype html>
-<html lang="ru">
+<html lang="${schema.locale ?? 'ru'}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="${esc(schema.motto)}" />
     <meta name="theme-color" content="${schema.theme.colors.primary}" />
     <title>${esc(schema.clubName)}</title>
-    <link rel="stylesheet" href="/portal.css" />
+${logo ? `    <link rel="icon" href="/${logo.path}" />\n` : ''}${font ? `    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n    <link rel="stylesheet" href="${font}" />\n` : ''}    <link rel="stylesheet" href="/portal.css" />
   </head>
   <body>
-    <div id="app"><div class="fx-shell"><div class="fx-empty">Загрузка портала…</div></div></div>
+    <div id="app"${logo ? ` data-logo="/${logo.path}"` : ''}><div class="fx-root"><div class="fx-shell"><div class="fx-empty">…</div></div></div></div>
     <script src="/portal.js" defer></script>
   </body>
 </html>
@@ -227,184 +242,275 @@ export function generatePortalHtml(schema: ClubSchema): string {
 /* ------------------------------------ DEPLOY.md ------------------------------ */
 
 export function generateDeployMd(schema: ClubSchema): string {
-  const folder = `${slugify(schema.clubName).replace(/_/g, '-')}-portal`;
+  const folder = exportFolderName(schema);
   const entityList = schema.entities
     .map((e) => {
       const rels = resolveRelations(e, schema);
       const relText = rels.length
-        ? ` Связи: ${rels.map((r) => `\`${r.name}\` → \`${r.targetEntityId}\`${r.multiple ? ' (много)' : ''}`).join(', ')}.`
-        : '';
-      return `| \`${e.id}\` | ${e.pluralName} | ${e.fields.length} |${relText ? relText : ' —'} |`;
+        ? rels.map((r) => `\`${r.name}\` → \`${r.targetEntityId}\`${r.multiple ? ' (много)' : ''}`).join(', ')
+        : '—';
+      return `| \`${e.id}\` | ${e.pluralName} | ${e.fields.length} | ${relText} |`;
     })
     .join('\n');
 
-  return `# 🚀 Как развернуть портал «${schema.clubName}»
+  return `# 🚀 Система клуба «${schema.clubName}»
 
-> ${schema.motto || 'Портал клуба, собранный в Facet OS.'}
+> ${schema.motto || 'Собрано в Facet OS.'}
 
-Эта папка — полностью готовый self-hosted портал. Внутри:
+Эта папка — готовая к запуску система управления клубом: база данных и панель управления (PocketBase), рабочий портал с таблицами, канбаном, календарём и карточками записей, HTTPS и резервные копии.
 
 | Файл / папка | Что это |
 | --- | --- |
-| \`docker-compose.yml\` | Описание двух контейнеров: **pocketbase** (база данных + API + админка) и **web** (Nginx с порталом) |
-| \`.env\` | Логин/пароль администратора и порт. **Поменяйте пароль перед запуском на сервере!** |
-| \`club-schema.json\` | Декларативный слепок клуба: тема, сущности, поля, связи. Можно снова импортировать в Facet OS |
-| \`pocketbase/\` | Dockerfile и миграции — коллекции создаются автоматически при первом старте |
-| \`nginx/default.conf\` | Конфигурация веб-сервера: портал + проксирование \`/api\` и \`/_/\` |
-| \`web/\` | Сам портал (HTML + CSS + JS без сборки) |
+| \`install.sh\` | Установка одной командой (ставит Docker, при желании включает HTTPS) |
+| \`backup.sh\` / \`restore.sh\` | Ручная резервная копия и восстановление |
+| \`docker-compose.yml\` | Контейнеры: **pocketbase** (база + API + админка), **web** (Nginx + портал), **caddy** (HTTPS, по желанию) |
+| \`.env\` | Логин/пароль администратора, порт, домен, настройки бэкапов. **Не публикуйте!** |
+| \`club-schema.json\` | Слепок структуры клуба. Нужен для будущих обновлений — не редактируйте вручную |
+| \`pocketbase/\` | Образ, миграции (создают разделы и связи) и хуки (настройки из \`.env\`) |
+| \`nginx/\`, \`caddy/\` | Веб-сервер с защитными заголовками и лимитами, HTTPS-шлюз |
+| \`web/\` | Сам портал (HTML + CSS + JS, без сборки) |
 
-> 💡 Файл \`.env\` начинается с точки — в macOS/Linux он скрыт. Показать: \`ls -la\` или \`Cmd+Shift+.\` в Finder.
-
----
-
-## Шаг 0. Установите Docker
-
-- **Windows / macOS:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) → установить → запустить.
-- **Linux:** \`curl -fsSL https://get.docker.com | sh\`
-
-Проверка: \`docker compose version\` должен вывести версию (v2.x и новее).
+> 💡 \`.env\` начинается с точки и в macOS/Linux скрыт: \`ls -la\` или \`Cmd+Shift+.\` в Finder.
 
 ---
 
-## Шаг 1. Запуск на своём компьютере
-
-\`\`\`bash
-# 1. Распакуйте архив и перейдите в папку
-cd ${folder}
-
-# 2. Соберите и запустите контейнеры в фоне
-docker compose up -d --build
-
-# 3. Убедитесь, что оба сервиса в статусе "running" / "healthy"
-docker compose ps
-\`\`\`
-
-Откройте:
-
-- **Портал:** http://localhost:8080
-- **Панель управления:** http://localhost:8080/_/ — логин и пароль из файла \`.env\` (\`PB_ADMIN_EMAIL\` / \`PB_ADMIN_PASSWORD\`)
-
-В панели управления уже созданы коллекции — добавляйте записи, и они сразу появятся на портале.
-
-| Коллекция | На портале | Полей | Связи |
-| --- | --- | --- | --- |
-${entityList}
-
----
-
-## Шаг 2. Запуск на VPS (сервер в интернете)
+## Вариант А. Сервер в интернете (VPS) — рекомендуемый
 
 Подойдёт любой VPS с Ubuntu 22.04+ и 1 ГБ RAM.
 
 \`\`\`bash
-# 1. Скопируйте папку на сервер (выполняется на вашем компьютере)
+# на своём компьютере: скопировать папку на сервер
 scp -r ${folder} root@IP_СЕРВЕРА:/opt/
 
-# 2. Подключитесь к серверу
+# на сервере
 ssh root@IP_СЕРВЕРА
-
-# 3. Установите Docker (один раз)
-curl -fsSL https://get.docker.com | sh
-
-# 4. Задайте надёжный пароль администратора
 cd /opt/${folder}
-nano .env          # измените PB_ADMIN_PASSWORD (минимум 10 символов)
-
-# 5. Запустите
-docker compose up -d --build
+sudo ./install.sh club.example.ru     # или без домена: sudo ./install.sh
 \`\`\`
 
-Портал будет доступен по адресу \`http://IP_СЕРВЕРА:8080\`.
+Скрипт сам поставит Docker, соберёт контейнеры и выведет адрес портала, логин и пароль.
 
-### Хотите на 80 порт и свой домен?
+**С доменом:** заранее создайте у регистратора A-запись \`club.example.ru → IP сервера\` и откройте порты 80 и 443. Сертификат HTTPS выпустится и будет продлеваться автоматически.
 
-1. В \`.env\` поставьте \`PORTAL_PORT=80\` и выполните \`docker compose up -d\`.
-2. В DNS домена создайте A-запись на IP сервера.
-3. Для HTTPS проще всего поставить перед портом [Caddy](https://caddyserver.com/docs/quick-starts/reverse-proxy):
-   \`caddy reverse-proxy --from club.example.ru --to localhost:8080\` (тогда \`PORTAL_PORT\` оставьте 8080).
+**Без домена:** портал будет на \`http://IP_СЕРВЕРА:8080\`. Подойдёт для пробы, но пароли передаются без шифрования.
+
+## Вариант Б. Свой компьютер
+
+1. Установите [Docker Desktop](https://www.docker.com/products/docker-desktop/) и запустите его.
+2. В папке портала выполните \`docker compose up -d --build\`.
+3. Откройте http://localhost:8080, панель управления — http://localhost:8080/_/ (логин и пароль — в \`.env\`).
 
 ---
+
+## Разделы системы
+
+| Коллекция | Раздел | Полей | Связи |
+| --- | --- | --- | --- |
+${entityList}
+
+Записи добавляются и меняются в панели управления \`/_/\`. На портале у каждой записи есть кнопка «Изменить», которая открывает её в панели.
+
+## Резервные копии
+
+- **Автоматически:** каждую ночь в 03:00 (настраивается \`BACKUP_CRON\` в \`.env\`), хранятся последние 14. Список и скачивание — \`/_/\` → *Settings → Backups*.
+- **В облако:** заполните \`BACKUP_S3_*\` в \`.env\` и выполните \`docker compose up -d\`.
+- **Вручную:** \`./backup.sh\` → архив в папке \`backups/\`. Скопируйте его к себе: \`scp root@IP:/opt/${folder}/backups/*.tar.gz .\`
+- **Восстановить:** \`./restore.sh backups/pb_data-ДАТА.tar.gz\` (текущее состояние перед этим тоже сохранится).
+
+## Как обновить структуру клуба
+
+Добавили раздел, поле или связь в Facet OS? Данные терять не нужно:
+
+1. В Facet OS нажмите **Экспорт → Обновление**. Если редактор открыт на другом компьютере, загрузите \`club-schema.json\` с сервера кнопкой «Версия на сервере».
+2. Проверьте список изменений — опасные (удаление данных) подсвечены красным.
+3. Скачайте архив обновления, скопируйте на сервер и выполните:
+   \`\`\`bash
+   ./apply-update.sh /opt/${folder}
+   \`\`\`
+   Скрипт проверит, что обновление собрано именно для вашей версии, сделает полную копию (база + файлы), применит миграцию и перезапустит систему.
+4. Что-то пошло не так? \`./restore.sh backups/update-ДАТА\` вернёт всё как было.
+
+## Безопасность
+
+- Чтение записей открыто всем, кто знает адрес портала; изменение — только администраторам.
+  Ограничить просмотр можно в \`/_/\` → *Collections → ⚙ → API Rules* (например, \`@request.auth.id != ""\`).
+- Вход в панель ограничен 10 попытками в минуту с одного IP; API — 30 запросами в секунду.
+- Поменяйте пароль администратора после первого входа: \`/_/\` → *System → Superusers*.
+- Добавить ещё администратора — там же, кнопка *New*.
 
 ## Полезные команды
 
 | Задача | Команда |
 | --- | --- |
-| Посмотреть логи | \`docker compose logs -f\` |
+| Статус контейнеров | \`docker compose ps\` |
+| Логи | \`docker compose logs -f\` |
+| Перезапуск | \`docker compose restart\` |
 | Остановить | \`docker compose down\` |
-| Перезапустить после правок \`web/\` или \`club-schema.json\` | \`docker compose restart web\` |
-| Обновить PocketBase | поменяйте \`PB_VERSION\` в \`docker-compose.yml\` → \`docker compose up -d --build\` |
-| Резервная копия базы | \`docker compose cp pocketbase:/pb/pb_data ./backup-$(date +%F)\` |
-
-## Как поменять структуру клуба потом
-
-Миграции применяются **один раз** — при первом запуске. Если вы изменили сущности в Facet OS:
-
-- **Данных ещё нет:** \`docker compose down -v\` (⚠️ удалит базу) → замените папку новым экспортом → \`docker compose up -d --build\`.
-- **Данные уже есть:** добавьте новые поля вручную в панели \`/_/\` → *Collections*, а затем замените \`club-schema.json\` новым — портал подхватит изменения после \`docker compose restart web\`.
-
-## Права доступа
-
-- Просматривать записи может любой посетитель портала.
-- Создавать, менять и удалять — только администраторы через \`/_/\`.
-  Добавить ещё админа: \`/_/\` → *System → Superusers → New*.
-- Правила можно изменить для каждой коллекции в \`/_/\` → *Collections → ⚙ → API Rules*.
+| Применить изменения \`.env\` | \`docker compose up -d\` |
 
 ## Что-то не работает?
 
 | Симптом | Решение |
 | --- | --- |
-| \`port is already allocated\` | Порт 8080 занят — поменяйте \`PORTAL_PORT\` в \`.env\` |
-| На портале «Не удалось загрузить данные» | \`docker compose logs pocketbase\` — смотрите ошибку миграции |
-| Не пускает в \`/_/\` | Пароль из \`.env\` применяется только при первом запуске. Задать новый: \`docker compose exec pocketbase /pb/pocketbase superuser upsert EMAIL ПАРОЛЬ --dir=/pb/pb_data\` |
-| \`exec format error\` на ARM-сервере | Соберите заново: \`docker compose build --no-cache\` (архитектура определяется автоматически) |
+| \`port is already allocated\` | Порт занят — поменяйте \`PORTAL_PORT\` в \`.env\` |
+| HTTPS не выпускается | Проверьте A-запись домена и что порты 80/443 открыты: \`docker compose logs caddy\` |
+| «Не удалось загрузить данные» | \`docker compose logs pocketbase\` — смотрите ошибку миграции |
+| Забыли пароль администратора | \`docker compose exec pocketbase /pb/pocketbase superuser upsert EMAIL НОВЫЙ_ПАРОЛЬ --dir=/pb/pb_data\` |
+| \`exec format error\` на ARM-сервере | \`docker compose build --no-cache\` |
 
 ---
 
-Собрано в **Facet OS** · ${new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+Собрано в **Facet OS ${FACET_VERSION}**
 `;
 }
 
-/* ------------------------------------ Bundle --------------------------------- */
+function generateUpdateMd(schema: ClubSchema, diff: SchemaDiff, seededRows: number, baseHash: string): string {
+  const folder = exportFolderName(schema);
+  const lines = diff.changes.map((c) => `- ${c.severity === 'danger' ? '🔴' : c.severity === 'warning' ? '🟡' : '🟢'} ${describeChange(c, 'ru')}`);
+  if (seededRows) lines.push(`- 🟢 Импорт данных: ${seededRows} записей`);
+  return `# Обновление системы «${schema.clubName}»
 
-export function buildExportFiles(schema: ClubSchema): ExportFile[] {
-  const stamp = Math.floor(Date.now() / 1000);
-  return [
-    { path: 'docker-compose.yml', content: generateDockerCompose(schema), description: 'PocketBase + Nginx в двух контейнерах' },
-    { path: 'club-schema.json', content: generateSchemaJson(schema), description: 'Декларативный слепок клуба' },
-    { path: 'DEPLOY.md', content: generateDeployMd(schema), description: 'Инструкция: локально и на VPS' },
-    { path: '.env', content: generateEnv(schema), description: 'Логин и случайный пароль администратора' },
-    { path: 'pocketbase/Dockerfile', content: pocketbaseDockerfile, description: 'Образ PocketBase с миграциями' },
-    {
-      path: `pocketbase/pb_migrations/${stamp}_facet_collections.js`,
-      content: generatePocketbaseMigration(schema),
-      description: 'Создание коллекций и связей',
-    },
-    {
-      path: `pocketbase/pb_migrations/${stamp + 1}_facet_superuser.js`,
-      content: superuserMigration,
-      description: 'Суперпользователь из .env',
-    },
-    { path: 'nginx/default.conf', content: nginxConf, description: 'Портал + прокси /api и /_/' },
+## Что изменится
+
+${lines.length ? lines.join('\n') : '- Структура базы не меняется — обновятся тема, портал и настройки.'}
+
+## Как применить
+
+1. Скопируйте эту папку на сервер (рядом с порталом):
+   \`\`\`bash
+   scp -r ${projectSlug(schema)}-update-* root@IP_СЕРВЕРА:/opt/
+   \`\`\`
+2. На сервере:
+   \`\`\`bash
+   cd /opt/${projectSlug(schema)}-update-*
+   ./apply-update.sh /opt/${folder}
+   \`\`\`
+
+Скрипт:
+- убедится, что обновление собрано для версии, которая стоит на сервере (SHA-256 \`club-schema.json\` = \`${baseHash.slice(0, 16)}…\`);
+- сохранит полную копию базы и файлов в \`backups/update-ДАТА\`;
+- положит новые файлы (\`.env\` не трогается — только допишет новые настройки);
+- пересоберёт контейнеры — PocketBase применит миграцию автоматически.
+
+## Откат
+
+\`\`\`bash
+cd /opt/${folder}
+./restore.sh backups/update-ДАТА
+\`\`\`
+`;
+}
+
+/* --------------------------------- bundles ----------------------------------- */
+
+/** Файлы, общие для установки и обновления (всё, кроме .env и уже применённых миграций). */
+function sharedFiles(schema: ClubSchema): ExportFile[] {
+  const files: ExportFile[] = [
+    { path: 'docker-compose.yml', content: generateDockerCompose(schema), description: 'PocketBase + Nginx + Caddy (HTTPS)' },
+    { path: 'club-schema.json', content: generateSchemaJson(schema), description: 'Слепок структуры — база для обновлений' },
+    { path: 'DEPLOY.md', content: generateDeployMd(schema), description: 'Инструкция: установка, HTTPS, бэкапы, обновления' },
+    { path: 'install.sh', content: installSh, description: 'Установка на сервер одной командой', executable: true },
+    { path: 'backup.sh', content: backupSh, description: 'Ручная резервная копия', executable: true },
+    { path: 'restore.sh', content: restoreSh, description: 'Восстановление и откат обновления', executable: true },
+    { path: 'pocketbase/Dockerfile', content: pocketbaseDockerfile, description: 'Образ PocketBase' },
+    { path: 'pocketbase/pb_hooks/facet.pb.js', content: pbHooks, description: 'Настройки из .env: бэкапы, S3, домен' },
+    { path: 'nginx/default.conf', content: nginxConf, description: 'Портал, прокси API, лимиты запросов' },
+    { path: 'nginx/snippets/facet-proxy.conf', content: nginxProxy, description: 'Параметры проксирования' },
+    { path: 'nginx/snippets/facet-headers.conf', content: nginxHeaders, description: 'Защитные заголовки' },
+    { path: 'nginx/snippets/facet-csp.conf', content: nginxCsp, description: 'Content-Security-Policy портала' },
+    { path: 'caddy/Caddyfile', content: caddyfile, description: 'HTTPS с автосертификатом' },
     { path: 'web/index.html', content: generatePortalHtml(schema), description: 'Точка входа портала' },
     { path: 'web/portal.css', content: generatePortalCss(schema), description: 'Тема клуба в CSS-переменных' },
-    { path: 'web/portal.js', content: portalJs, description: 'Рендер портала из схемы и API' },
+    { path: 'web/portal.js', content: portalJs, description: 'Портал: дашборд, таблицы, канбан, календарь' },
   ];
+  const logo = logoFile(schema);
+  if (logo) files.push({ path: `web/${logo.path}`, content: logo.base64, encoding: 'base64', description: 'Логотип клуба' });
+  return files;
 }
 
-export function exportFolderName(schema: ClubSchema): string {
-  return `${slugify(schema.clubName).replace(/_/g, '-')}-portal`;
+function seedOpsFor(schema: ClubSchema, seeds: Record<string, SeedBatch>) {
+  const ops = orderSeedOps(
+    schema.entities
+      .filter((e) => seeds[e.id]?.rows.length)
+      .map((e) => buildSeedOp(schema, e, seeds[e.id])),
+  );
+  return { ops, rows: ops.reduce((n, op) => n + op.rows.length, 0) };
 }
 
-/** Собирает zip-архив в браузере и отдаёт его на скачивание. */
-export async function downloadZip(schema: ClubSchema, files = buildExportFiles(schema)): Promise<void> {
-  const zip = new JSZip();
-  const folder = zip.folder(exportFolderName(schema))!;
-  for (const file of files) folder.file(file.path, file.content);
-  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-  saveAs(blob, `${exportFolderName(schema)}.zip`);
+function manifest(kind: ExportBundle['kind'], now: Date, schemaHash: string, migrations: string[], baseHash?: string): string {
+  return `${JSON.stringify({ facet: FACET_VERSION, kind, exportedAt: now.toISOString(), schemaSha256: schemaHash, baseSchemaSha256: baseHash, migrations }, null, 2)}\n`;
 }
 
-export function downloadSingleFile(file: ExportFile): void {
-  const name = file.path.split('/').pop() ?? file.path;
-  saveAs(new Blob([file.content], { type: 'text/plain;charset=utf-8' }), name);
+/** Полная установка с нуля. */
+export async function buildInstallBundle(
+  schema: ClubSchema,
+  seeds: Record<string, SeedBatch> = {},
+  options: ExportOptions = {},
+): Promise<ExportBundle> {
+  const now = options.now ?? new Date();
+  const ts = Math.floor(now.getTime() / 1000);
+  const diff = planMigration(null, schema);
+  const seed = seedOpsFor(schema, seeds);
+  const initName = `${ts}_facet_init.js`;
+  const files = sharedFiles(schema);
+  files.push(
+    { path: '.env', content: generateEnv(schema, options.password), description: 'Логин и случайный пароль администратора, настройки' },
+    {
+      path: `pocketbase/pb_migrations/${initName}`,
+      content: renderMigrationFile({ title: `структура клуба «${schema.clubName}»`, ops: [...diff.ops, ...seed.ops] }),
+      description: seed.rows ? `Разделы, связи и импорт ${seed.rows} записей` : 'Разделы и связи',
+    },
+    { path: `pocketbase/pb_migrations/${ts + 1}_facet_superuser.js`, content: superuserMigration, description: 'Администратор из .env' },
+    {
+      path: '.facet/manifest.json',
+      content: manifest('install', now, await sha256Hex(generateSchemaJson(schema)), [initName]),
+      description: 'Версия сборки',
+    },
+  );
+  return { kind: 'install', folder: exportFolderName(schema), files, diff, seededRows: seed.rows };
+}
+
+/** Обновление уже развёрнутой системы: только разница с версией на сервере. */
+export async function buildUpdateBundle(
+  baseline: Baseline,
+  schema: ClubSchema,
+  seeds: Record<string, SeedBatch> = {},
+  options: ExportOptions = {},
+): Promise<ExportBundle> {
+  const now = options.now ?? new Date();
+  const ts = Math.floor(now.getTime() / 1000);
+  const diff = planMigration(baseline.schema, schema);
+  const seed = seedOpsFor(schema, seeds);
+  const baseHash = await sha256Hex(baseline.raw);
+  const migrationName = `${ts}_facet_update.js`;
+  const hasMigration = diff.ops.length > 0 || seed.ops.length > 0;
+
+  const payload = sharedFiles(schema).map((f) => ({ ...f, path: `payload/${f.path}` }));
+  if (hasMigration) {
+    payload.push({
+      path: `payload/pocketbase/pb_migrations/${migrationName}`,
+      content: renderMigrationFile({ title: `обновление структуры «${schema.clubName}»`, ops: [...diff.ops, ...seed.ops] }),
+      description: `${diff.ops.length} изменений структуры${seed.rows ? `, импорт ${seed.rows} записей` : ''}`,
+    });
+  }
+  payload.push({
+    path: 'payload/.facet/manifest.json',
+    content: manifest('update', now, await sha256Hex(generateSchemaJson(schema)), hasMigration ? [migrationName] : [], baseHash),
+    description: 'Версия сборки',
+  });
+
+  const changesTxt = [
+    ...diff.changes.map((c) => `  ${SEVERITY_MARK[c.severity]} ${describeChange(c, 'ru')}`),
+    ...(seed.rows ? [`  + Импорт данных: ${seed.rows} записей`] : []),
+  ];
+
+  const files: ExportFile[] = [
+    { path: 'UPDATE.md', content: generateUpdateMd(schema, diff, seed.rows, baseHash), description: 'Что изменится и как применить' },
+    { path: 'apply-update.sh', content: applyUpdateSh, description: 'Проверка версии, бэкап, применение', executable: true },
+    { path: 'CHANGES.txt', content: `${changesTxt.length ? changesTxt.join('\n') : '  Структура базы не меняется.'}\n`, description: 'Список изменений' },
+    { path: 'env.defaults', content: ENV_DEFAULTS, description: 'Новые настройки для .env' },
+    { path: '.facet/base-schema.sha256', content: `${baseHash}\n`, description: 'Контрольная сумма версии на сервере' },
+    ...payload,
+  ];
+  return { kind: 'update', folder: `${projectSlug(schema)}-update-${stamp(now)}`, files, diff, seededRows: seed.rows };
 }

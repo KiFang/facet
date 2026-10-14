@@ -1,0 +1,73 @@
+import { keyOf, type ClubEntity, type ClubSchema, type EntityField } from '@/types/schema';
+import { resolveRelations } from '@/utils/relations';
+
+/**
+ * «Физическая» модель базы PocketBase, которую порождает схема клуба.
+ * Сравнивая две физические модели, получаем миграцию без потери данных.
+ */
+
+export type PbFieldType = 'text' | 'number' | 'date' | 'select' | 'file' | 'relation';
+
+export interface PhysField {
+  /** Стабильный ключ (uid поля, либо `rel:<ключ цели>` для связей уровня сущности). */
+  key: string;
+  name: string;
+  type: PbFieldType;
+  required: boolean;
+  /** select: допустимые значения. */
+  values?: string[];
+  /** relation: ключ целевой коллекции. */
+  targetKey?: string;
+  /** select/relation/file: 1 — одно значение. */
+  maxSelect?: number;
+}
+
+export interface PhysCollection {
+  key: string;
+  name: string;
+  fields: PhysField[];
+}
+
+export type PhysModel = PhysCollection[];
+
+/** Максимум связанных записей для связи «много ↔ много». */
+export const MULTI_RELATION_MAX = 999;
+
+function physField(field: EntityField): PhysField | null {
+  const base = { key: keyOf(field), name: field.id, required: field.required };
+  switch (field.type) {
+    case 'text':
+      return { ...base, type: 'text' };
+    case 'number':
+      return { ...base, type: 'number' };
+    case 'date':
+      return { ...base, type: 'date' };
+    case 'select':
+    case 'status':
+      return { ...base, type: 'select', maxSelect: 1, values: field.options?.length ? [...field.options] : ['—'] };
+    case 'file':
+      return { ...base, type: 'file', maxSelect: 1 };
+    case 'relation':
+      return null; // добавляются ниже через resolveRelations — единый алгоритм имён
+  }
+}
+
+export function toPhysical(schema: ClubSchema): PhysModel {
+  const keyById = new Map(schema.entities.map((e) => [e.id, keyOf(e)]));
+  return schema.entities.map((entity: ClubEntity) => {
+    const fields = entity.fields.map(physField).filter((f): f is PhysField => f !== null);
+    for (const rel of resolveRelations(entity, schema)) {
+      const sourceField = entity.fields.find((f) => f.type === 'relation' && f.id === rel.name);
+      const targetKey = keyById.get(rel.targetEntityId)!;
+      fields.push({
+        key: sourceField ? keyOf(sourceField) : `rel:${targetKey}`,
+        name: rel.name,
+        type: 'relation',
+        required: rel.required,
+        targetKey,
+        maxSelect: rel.multiple ? MULTI_RELATION_MAX : 1,
+      });
+    }
+    return { key: keyOf(entity), name: entity.id, fields };
+  });
+}

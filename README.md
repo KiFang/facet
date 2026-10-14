@@ -1,60 +1,101 @@
 # Facet OS
 
-🏛️ Open-source визуальный no-code билдер self-hosted порталов для студенческих клубов, гильдий и кампусов.
-Соберите структуру клуба и стиль в редакторе — и одной кнопкой получите готовый к запуску Docker-проект.
+🏛️ Open-source no-code система управления студенческим клубом, гильдией или кампусной организацией — «1С для клуба».
+Соберите разделы, связи и стиль в визуальном редакторе и одной кнопкой получите готовую self-hosted систему в Docker:
+база данных с панелью управления, рабочий портал с таблицами, канбаном и календарём, HTTPS и резервные копии.
 
 ## Быстрый старт
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # typecheck + production-сборка в dist/
+npm run dev      # редактор на http://localhost:5173
+npm run build    # проверка типов + production-сборка в dist/
 ```
 
-## Режимы редактора
+## Что умеет редактор
 
-| Режим | Для кого | Что доступно |
-| --- | --- | --- |
-| **Easy** | Первый запуск | Шаблоны клубов, название/девиз, палитры, скругление и плотность, добавление/удаление модулей |
-| **Advanced** | Оргкомитет | Слайдеры токенов темы (скругление 0–28px, рамки, тени, разделители, цвета с проверкой контраста), конструктор полей и связей |
-| **Pro** | Технари | Системные id полей/коллекций, прямое редактирование и импорт `club-schema.json` с валидацией |
+| Режим | Что доступно |
+| --- | --- |
+| **Easy** | Шаблоны клубов (встроенные и от сообщества), название и девиз, логотип, шрифт, палитры, форма и плотность |
+| **Advanced** | Конструктор модулей: поля, связи, вид раздела (карточки / таблица / канбан / календарь), импорт данных из CSV и Google Таблиц, главная-дашборд, токены темы |
+| **Pro** | Системные имена коллекций и полей (переименование без потери данных), прямое редактирование `club-schema.json` |
 
-Живое превью справа использует **тот же CSS**, что уходит в экспорт, — что видите, то и получите.
+Во всех режимах есть **отмена/повтор** (Ctrl+Z / Ctrl+Shift+Z), **ссылка «Поделиться»** (структура и тема упаковываются в адрес),
+переключение языка интерфейса и портала (**русский / English**).
 
-## Экспорт в Self-Host
+Живое превью справа — **тот же код портала**, что работает на сервере (`src/portal`), только на примерах данных
+или на импортированных строках.
 
-Кнопка «Экспорт в Self-Host» показывает все файлы и собирает zip прямо в браузере:
+## Экспорт: установка и обновления
+
+**Новая установка** — zip с полной системой:
 
 ```
 <club>-portal/
-├── docker-compose.yml          # pocketbase + nginx
-├── .env                        # логин и случайный пароль администратора
-├── club-schema.json            # декларативный слепок клуба
-├── DEPLOY.md                   # инструкция: локально и на VPS
-├── pocketbase/
-│   ├── Dockerfile
-│   └── pb_migrations/          # коллекции, связи и суперпользователь создаются автоматически
-├── nginx/default.conf          # портал + прокси /api и /_/
-└── web/                        # портал без сборки: index.html, portal.css, portal.js
+├── install.sh                  # установка одной командой: Docker, HTTPS по домену, запуск
+├── backup.sh / restore.sh      # ручная резервная копия, восстановление, откат обновления
+├── docker-compose.yml          # pocketbase + nginx + caddy (HTTPS, профиль https)
+├── .env                        # администратор, порт, домен, расписание бэкапов, S3
+├── club-schema.json            # слепок структуры — база для будущих обновлений
+├── DEPLOY.md                   # инструкция для студентов
+├── pocketbase/                 # образ, миграции (разделы, связи, импорт данных), хуки (бэкапы, S3, домен)
+├── nginx/                      # портал, прокси API, защитные заголовки, CSP, лимиты запросов
+├── caddy/Caddyfile             # автосертификат Let's Encrypt
+└── web/                        # портал без сборки: index.html, portal.js, portal.css, логотип
 ```
 
-Запуск: `docker compose up -d --build` → портал на `http://localhost:8080`, панель управления на `/_/`.
-Чтение записей публичное, запись — только администраторы через `/_/`.
+**Обновление** — только разница с версией на сервере. Редактор сравнивает текущую схему с последней экспортированной
+(или с `club-schema.json`, загруженным с сервера), показывает изменения с пометками об опасности и собирает архив
+с инкрементальной миграцией. `apply-update.sh` проверяет контрольную сумму версии на сервере, делает полную
+резервную копию (база + файлы), применяет обновление и подсказывает откат: `./restore.sh backups/update-…`.
+
+Переименования полей и разделов сохраняют данные: у переименованного элемента появляется неизменяемый `uid`,
+и миграция переименовывает колонку вместо удаления.
+
+## Тесты
+
+```bash
+npm test                                   # unit: CSV, diff миграций, валидатор, ссылки, рендер портала
+npm run test:e2e                           # Playwright: редактор, импорт, экспорт установки и обновления
+npm run smoke:pb -- --pb ./pocketbase      # миграции на настоящем PocketBase: установка, импорт, обновление
+npm run export -- --preset general --out ./out        # CLI экспорта (для CI и автоматизации)
+```
+
+CI (`.github/workflows/ci.yml`) дополнительно поднимает экспорт в Docker: `install.sh`, заголовки и лимиты Nginx,
+`backup.sh` / `restore.sh`, `apply-update.sh` с проверкой сохранности данных и откат обновления.
+
+## Как добавить шаблон в галерею сообщества
+
+1. Соберите клуб в редакторе и скачайте `club-schema.json` (Pro → JSON или любой экспорт).
+2. Создайте файл `src/data/templates/<имя>.json`:
+   ```json
+   {
+     "meta": { "title": "Название", "description": "Что внутри", "icon": "Trophy", "author": "Ваш клуб" },
+     "schema": { "...": "содержимое club-schema.json без editorMode" }
+   }
+   ```
+   `icon` — одно из имён в `src/portal/icons.ts` (`ENTITY_ICON_NAMES`).
+3. `npm test` проверит, что шаблон валиден. Откройте pull request.
 
 ## Структура
 
 ```
 src/
-├── types/schema.ts          # ThemeTokens, EntityField, ClubEntity, ClubSchema
-├── store/useClubStore.ts    # Zustand-стор (persist в localStorage)
-├── data/presets.ts          # пресеты: general, gaming, boardgames, media
-├── components/              # Navbar, ThemeCustomizer, EntityBuilder, LivePreview, ExportDialog, SchemaEditor, ui/
+├── types/schema.ts            # ClubSchema, ThemeTokens, ClubEntity, EntityField, виды, дашборд
+├── store/useClubStore.ts      # Zustand + история (zundo), версия на сервере, импортированные данные
+├── components/                # редактор: Navbar, ThemeCustomizer, EntityBuilder, ImportDialog, ExportDialog, LivePreview…
+├── portal/                    # портал (превью и сервер): рендер видов, контроллер, источники данных, стили
 ├── utils/
-│   ├── exporter.ts          # генерация docker-compose, миграций PocketBase, DEPLOY.md, zip
-│   ├── theme.ts             # токены → CSS-переменные (общие для превью и портала)
-│   ├── relations.ts         # единый резолвер связей
-│   └── validate.ts          # валидация club-schema.json
-└── export-templates/        # nginx.conf, Dockerfile, portal.js/css — кладутся в архив как есть
+│   ├── exporter.ts            # архивы установки и обновления
+│   ├── migrations/            # физическая модель, diff, генерация миграций, импорт строк
+│   ├── csv.ts                 # CSV / Google Таблицы, определение типов, сопоставление колонок
+│   ├── share.ts               # ссылка «Поделиться»
+│   └── validate.ts, normalize.ts, theme.ts, relations.ts
+├── i18n/                      # интерфейс редактора: ru / en
+├── data/                      # пресеты и шаблоны сообщества
+└── export-templates/          # Dockerfile, nginx, Caddyfile, хуки, shell-скрипты, runtime миграций
+scripts/                       # CLI экспорта, смоук на PocketBase
+e2e/                           # Playwright
 ```
 
-Стек: React + TypeScript + Vite, Tailwind CSS, Radix UI, Zustand, lucide-react, JSZip + file-saver. Бэкенд портала — PocketBase 0.25.
+Стек: React + TypeScript + Vite, Tailwind CSS, Radix UI, Zustand + zundo, lucide, JSZip. Сервер клуба — PocketBase 0.25, Nginx, Caddy.

@@ -1,0 +1,67 @@
+{
+  "meta": {
+    "title": "Студсовет",
+    "description": "Заседания, решения, поручения и бюджет",
+    "icon": "Crown",
+    "author": "Facet OS"
+  },
+  "schema": {
+    "clubName": "Студенческий совет",
+    "motto": "Решаем вместе",
+    "locale": "ru",
+    "theme": {
+      "borderRadius": 8,
+      "borderWidth": 1,
+      "shadowIntensity": "soft",
+      "dividerStyle": "solid",
+      "density": "compact",
+      "font": "inter",
+      "colors": { "primary": "#1d4ed8", "background": "#f4f6fb", "surface": "#ffffff", "accent": "#0891b2", "text": "#0f1b3d" }
+    },
+    "dashboard": { "enabled": true, "widgets": ["stats", "statuses", "upcoming", "recent"] },
+    "entities": [
+      {
+        "id": "meetings", "name": "Заседание", "pluralName": "Заседания", "icon": "Calendar",
+        "view": { "type": "table" },
+        "fields": [
+          { "id": "title", "name": "Повестка", "type": "text", "required": true },
+          { "id": "date", "name": "Дата", "type": "date", "required": true },
+          { "id": "protocol", "name": "Протокол", "type": "file", "required": false }
+        ],
+        "relations": [{ "targetEntityId": "members", "type": "many-to-many" }]
+      },
+      {
+        "id": "tasks", "name": "Поручение", "pluralName": "Поручения", "icon": "Flag",
+        "view": { "type": "kanban", "groupBy": "status" },
+        "fields": [
+          { "id": "title", "name": "Поручение", "type": "text", "required": true },
+          { "id": "status", "name": "Статус", "type": "status", "required": true, "options": ["Новое", "В работе", "На проверке", "Выполнено"] },
+          { "id": "deadline", "name": "Срок", "type": "date", "required": false },
+          { "id": "owner", "name": "Ответственный", "type": "relation", "required": false, "targetEntityId": "members" },
+          { "id": "meeting", "name": "Решение заседания", "type": "relation", "required": false, "targetEntityId": "meetings" }
+        ],
+        "relations": []
+      },
+      {
+        "id": "budget", "name": "Статья бюджета", "pluralName": "Бюджет", "icon": "Archive",
+        "view": { "type": "table" },
+        "fields": [
+          { "id": "item", "name": "Статья", "type": "text", "required": true },
+          { "id": "amount", "name": "Сумма, ₽", "type": "number", "required": true },
+          { "id": "kind", "name": "Тип", "type": "select", "required": true, "options": ["Доход", "Расход"] },
+          { "id": "date", "name": "Дата", "type": "date", "required": false }
+        ],
+        "relations": []
+      },
+      {
+        "id": "members", "name": "Член совета", "pluralName": "Состав", "icon": "Users",
+        "fields": [
+          { "id": "full_name", "name": "Имя", "type": "text", "required": true },
+          { "id": "position", "name": "Должность", "type": "select", "required": true, "options": ["Председатель", "Заместитель", "Секретарь", "Член совета"] },
+          { "id": "faculty", "name": "Факультет", "type": "text", "required": false }
+        ],
+        "relations": []
+      }
+    ]
+  }
+}

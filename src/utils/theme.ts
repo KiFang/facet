@@ -1,4 +1,19 @@
-import type { Density, ThemeTokens } from '@/types/schema';
+import type { Density, FontFamily, ThemeTokens } from '@/types/schema';
+
+export const FONTS: Record<FontFamily, { label: string; stack: string; google?: string }> = {
+  inter: { label: 'Inter', stack: 'Inter, ui-sans-serif, system-ui, sans-serif', google: 'Inter:wght@400;500;600;700;800' },
+  manrope: { label: 'Manrope', stack: 'Manrope, ui-sans-serif, system-ui, sans-serif', google: 'Manrope:wght@400;500;600;700;800' },
+  rubik: { label: 'Rubik', stack: 'Rubik, ui-sans-serif, system-ui, sans-serif', google: 'Rubik:wght@400;500;600;700;800' },
+  'pt-serif': { label: 'PT Serif', stack: '"PT Serif", Georgia, serif', google: 'PT+Serif:wght@400;700' },
+  jetbrains: { label: 'JetBrains Mono', stack: '"JetBrains Mono", ui-monospace, monospace', google: 'JetBrains+Mono:wght@400;500;700;800' },
+  system: { label: 'Системный', stack: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' },
+};
+
+/** URL таблицы стилей Google Fonts для шрифта темы или null для системного. */
+export function fontStylesheetUrl(font: FontFamily | undefined): string | null {
+  const spec = FONTS[font ?? 'inter'].google;
+  return spec ? `https://fonts.googleapis.com/css2?family=${spec}&display=swap` : null;
+}
 
 export function hexToRgb(hex: string): [number, number, number] {
   let h = hex.replace('#', '').trim();
@@ -57,6 +72,7 @@ export function themeToCssVars(theme: ThemeTokens): Record<string, string> {
   const { colors } = theme;
   const isDark = luminance(colors.background) < 0.2;
   return {
+    '--fx-font': FONTS[theme.font ?? 'inter'].stack,
     '--fx-radius': `${theme.borderRadius}px`,
     '--fx-radius-sm': `${Math.max(0, Math.round(theme.borderRadius * 0.6))}px`,
     '--fx-border-width': `${theme.borderWidth}px`,
