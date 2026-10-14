@@ -9,10 +9,13 @@ import { openDataEditor } from '@/lib/windows';
 import { cn } from '@/lib/cn';
 import { MenuItemBody, menuContentClass, menuItemClass, menuSeparatorClass } from '../ui/Menu';
 import { Tip } from '../ui/Tooltip';
+import { registerIcon } from '../properties/RegisterProperties';
 import { toast } from '../ui/Toast';
 
 function same(a: Selection, b: Selection) {
-  return a.kind === b.kind && (a.kind !== 'entity' || (b.kind === 'entity' && a.id === b.id));
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'entity' || a.kind === 'register') return (b as { id: string }).id === a.id;
+  return true;
 }
 
 function Row({ selection, icon, label, meta, depth = 0, testId }: { selection: Selection; icon: React.ReactNode; label: React.ReactNode; meta?: React.ReactNode; depth?: number; testId?: string }) {
@@ -129,6 +132,21 @@ export function Navigator() {
         })}
         {schema.entities.length === 0 && (
           <button type="button" onClick={() => open('newModule')} className="ml-6 py-1 text-xs text-accent-text hover:underline">{t('nav.addFirst')}</button>
+        )}
+
+        <GroupHeader action={
+          <Tip content={t('nav.addAccounting')}>
+            <button type="button" aria-label={t('nav.addAccounting')} data-testid="nav-add-accounting" onClick={() => open('newModule', 'accounting')} className="rounded p-0.5 text-fg-subtle hover:bg-hover hover:text-fg">
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </Tip>
+        }>{t('nav.accounting')}</GroupHeader>
+        {(schema.registers ?? []).map((r) => {
+          const RIcon = registerIcon(r.icon);
+          return <Row key={r.id} selection={{ kind: 'register', id: r.id }} icon={<RIcon className="h-3.5 w-3.5" />} label={r.name} depth={1} testId={`nav-register-${r.id}`} />;
+        })}
+        {!(schema.registers ?? []).length && (
+          <button type="button" onClick={() => open('newModule', 'accounting')} className="ml-6 py-1 text-left text-xs text-accent-text hover:underline">{t('nav.addFirstAccounting')}</button>
         )}
 
         <GroupHeader>{t('nav.system')}</GroupHeader>

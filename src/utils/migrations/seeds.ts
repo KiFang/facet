@@ -6,7 +6,7 @@ export interface SeedOp {
   op: 'seed';
   collection: string;
   relations: { field: string; target: string; titleField: string; multiple: boolean }[];
-  rows: { values: Record<string, string | number>; links: Record<string, string[]> }[];
+  rows: { values: Record<string, string | number | boolean>; links: Record<string, string[]> }[];
 }
 
 const DATE_RU = /^(\d{1,2})[./](\d{1,2})[./](\d{4})(?:[ T](\d{1,2}):(\d{2}))?$/;
@@ -51,7 +51,7 @@ export function buildSeedOp(schema: ClubSchema, entity: ClubEntity, batch: SeedB
     return { field: r.name, target: target.id, titleField: titleFieldOf(target), multiple: r.multiple };
   });
   const rows = batch.rows.map((row) => {
-    const values: Record<string, string | number> = {};
+    const values: Record<string, string | number | boolean> = {};
     const links: Record<string, string[]> = {};
     for (const field of entity.fields) {
       const raw = (row[field.id] ?? '').trim();
@@ -82,6 +82,8 @@ export function buildSeedOp(schema: ClubSchema, entity: ClubEntity, batch: SeedB
           values[field.id] = raw;
       }
     }
+    // Начальные данные операций сразу подтверждены — они попадут в остатки.
+    if (entity.kind === 'operation') values.posted = true;
     for (const rel of relations) {
       if (links[rel.field]) continue;
       const raw = (row[rel.field] ?? '').trim();

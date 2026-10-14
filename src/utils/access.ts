@@ -65,6 +65,12 @@ const staffCond = (roles: ClubRole[]): string | null => {
   return `@request.auth.collectionName = "${STAFF_COLLECTION}" && (${any})`;
 };
 
+/** Правила «только чтение» для коллекций, которые пишет сервер (движения регистров). */
+export function readOnlyRules(readers: ClubRole[]): CollectionRules {
+  const read = staffCond(readers);
+  return { listRule: read, viewRule: read, createRule: null, updateRule: null, deleteRule: null };
+}
+
 /** Старая модель: чтение публичное, запись — только суперпользователь (панель /_/). */
 export const LEGACY_RULES: CollectionRules = { listRule: '', viewRule: '', createRule: null, updateRule: null, deleteRule: null };
 

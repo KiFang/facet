@@ -19,6 +19,7 @@ import { generateSchemaJson } from '@/utils/schemaJson';
 import { resolveRelations } from '@/utils/relations';
 import { cssVarsToText, dividerCss, fontStylesheetUrl, themeToCssVars } from '@/utils/theme';
 import { planMigration, renderMigrationFile } from '@/utils/migrations/generate';
+import { registerHookFiles } from '@/utils/registers';
 import { buildSeedOp, orderSeedOps } from '@/utils/migrations/seeds';
 import { describeChange, SEVERITY_MARK } from '@/utils/migrations/describe';
 import type { SchemaDiff } from '@/utils/migrations/diff';
@@ -448,6 +449,7 @@ function sharedFiles(schema: ClubSchema): ExportFile[] {
   const logo = logoFile(schema);
   if (logo) files.push({ path: `web/${logo.path}`, content: logo.base64, encoding: 'base64', description: 'Логотип клуба' });
   files.push(...pluginFiles(schema));
+  files.push(...registerHookFiles(schema));
   return files;
 }
 

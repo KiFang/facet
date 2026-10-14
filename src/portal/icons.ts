@@ -70,7 +70,7 @@ const NODES: Record<string, IconNode> = {
   ListChecks: [["path", {"d": "m3 17 2 2 4-4"}], ["path", {"d": "m3 7 2 2 4-4"}], ["path", {"d": "M13 6h8"}], ["path", {"d": "M13 12h8"}], ["path", {"d": "M13 18h8"}]],
 };
 
-export const ENTITY_ICON_NAMES = ["Calendar", "Users", "Package", "Trophy", "Swords", "Gamepad2", "Dice5", "Puzzle", "Film", "Camera", "Clapperboard", "Mic", "Music", "Megaphone", "BookOpen", "FileText", "Image", "Map", "Flag", "Target", "Ticket", "Gift", "Award", "Crown", "Shield", "Star", "Heart", "Box", "Archive", "Wrench"] as const;
+export const ENTITY_ICON_NAMES = ["Calendar", "Users", "Package", "Trophy", "Swords", "Gamepad2", "Dice5", "Puzzle", "Film", "Camera", "Clapperboard", "Mic", "Music", "Megaphone", "BookOpen", "FileText", "Image", "Map", "Flag", "Target", "Ticket", "Gift", "Award", "Crown", "Shield", "Star", "Heart", "Box", "Archive", "Wrench", "Wallet", "ArrowRightLeft"] as const;
 
 const attr = (v: string | number) => String(v).replace(/"/g, '&quot;');
 

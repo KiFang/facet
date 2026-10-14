@@ -1,4 +1,5 @@
 import type { ClubEntity } from '@/types/schema';
+import { dimColumn, regCollection, resColumn } from '@/utils/registers';
 import { apiFetch } from '../session';
 import type { DataSource, PortalRecord, RecordPayload } from '../types';
 
@@ -51,6 +52,24 @@ export function pocketbaseSource(base = '', token: () => string | null = () => n
       apiFetch<PortalRecord>(`${col(entity)}/${encodeURIComponent(id)}`, { method: 'PATCH', body: body(payload) }, token()),
     remove: async (entity, id) => {
       await apiFetch(`${col(entity)}/${encodeURIComponent(id)}`, { method: 'DELETE' }, token());
+    },
+    async movements(reg) {
+      const out: Awaited<ReturnType<NonNullable<DataSource['movements']>>> = [];
+      for (let page = 1; page <= MAX_PAGES; page++) {
+        const data = await apiFetch<{ items: Record<string, unknown>[]; totalPages: number }>(
+          `${base}/api/collections/${regCollection(reg.id)}/records?page=${page}&perPage=${PAGE}&sort=period`, {}, token());
+        for (const r of data.items) {
+          out.push({
+            dims: Object.fromEntries(reg.dimensions.map((d) => [d.id, String(r[dimColumn(d.id)] ?? '')])),
+            res: Object.fromEntries(reg.resources.map((x) => [x.id, Number(r[resColumn(x.id)] ?? 0)])),
+            period: String(r.period ?? ''),
+            op_collection: String(r.op_collection ?? ''),
+            op_id: String(r.op_id ?? ''),
+          });
+        }
+        if (page >= data.totalPages) break;
+      }
+      return out;
     },
   };
 }

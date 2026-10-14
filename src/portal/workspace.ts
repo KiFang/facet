@@ -1,4 +1,5 @@
-import type { AccessLevel, ClubEntity, EntityField } from '@/types/schema';
+import type { AccessLevel, ClubEntity, ClubRegister, EntityField } from '@/types/schema';
+import { balances, POSTED_FIELD } from '@/utils/registers';
 import { icon } from './icons';
 import { relationsOf, recordTitle, fileNames } from './model';
 import { esc, type RenderCtx } from './render';
@@ -17,7 +18,14 @@ export interface WorkspaceCtx {
   writable: boolean;
   /** Есть разделы, видимые без входа. */
   hasPublic: boolean;
+  /** Регистры остатков, которые видит пользователь. */
+  registers: ClubRegister[];
 }
+
+export type MovementsState =
+  | { status: 'loading' }
+  | { status: 'error'; error: string }
+  | { status: 'ok'; rows: { dims: Record<string, string>; res: Record<string, number>; period: string }[] };
 
 export interface FormState {
   saving?: boolean;
@@ -112,6 +120,9 @@ export function renderForm(ctx: RenderCtx, entity: ClubEntity, record: PortalRec
   <h2>${icon(entity.icon, 20)}${esc(title)}</h2>
   ${state.error ? `<div class="fx-alert">${esc(state.error)}</div>` : ''}
   <div class="fx-form-grid">${fields}</div>
+  ${entity.kind === 'operation'
+    ? `<label class="fx-check fx-posted"><input type="checkbox" name="${POSTED_FIELD}"${!record || record[POSTED_FIELD] ? ' checked' : ''}> <span><strong>${esc(t('posted'))}</strong> <span class="fx-muted">— ${esc(t('postedHint'))}</span></span></label>`
+    : ''}
   <div class="fx-form-actions">
     <button type="submit" class="fx-btn fx-btn-accent"${state.saving ? ' disabled' : ''}>${icon('Check', 15)}${esc(state.saving ? t('saving') : t('save'))}</button>
     <a class="fx-btn fx-btn-ghost" data-nav="${esc(back)}" href="#${esc(back)}">${esc(t('cancel'))}</a>
@@ -140,6 +151,7 @@ export function readForm(ctx: RenderCtx, entity: ClubEntity, form: HTMLFormEleme
     else values[f.id] = raw;
     if (f.required && raw === '') missing.push(f.id);
   }
+  if (entity.kind === 'operation') values[POSTED_FIELD] = data.get(POSTED_FIELD) !== null;
   for (const r of rels) {
     const ids = data.getAll(r.name).map(String).filter(Boolean);
     values[r.name] = r.multiple ? ids : (ids[0] ?? '');
@@ -225,4 +237,40 @@ export function renderUserBar(ctx: RenderCtx, ws: WorkspaceCtx): string {
   const role = ctx.schema.roles?.find((r) => r.id === ws.user!.role);
   return `<a class="fx-user" data-nav="/profile" href="#/profile" title="${esc(t('profile'))}">${icon('UserRound', 15)}<span><strong>${esc(ws.user.name)}</strong>${role ? `<small>${esc(role.name)}</small>` : ''}</span></a>
 <button type="button" class="fx-btn fx-btn-ghost" data-logout title="${esc(t('signOut'))}" aria-label="${esc(t('signOut'))}">${icon('LogOut', 15)}</button>`;
+}
+
+const money = (n: number, locale: string) => n.toLocaleString(locale, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+/** Остатки по регистрам: таблица по измерениям с итогом. */
+export function renderBalances(ctx: RenderCtx, ws: WorkspaceCtx, states: Map<string, MovementsState>): string {
+  const { t } = ctx;
+  const titleOf = (target: string | undefined, id: string) => {
+    if (!target || !id) return id || '—';
+    const e = ctx.schema.entities.find((x) => x.id === target);
+    const st = e && ctx.data(e.id);
+    const rec = st?.status === 'ok' ? st.records.find((r) => r.id === id) : undefined;
+    return e && rec ? `<a data-nav="/${esc(e.id)}/${esc(id)}" href="#/${esc(e.id)}/${esc(id)}">${esc(recordTitle(e, rec, t('untitled')))}</a>` : esc(id);
+  };
+  const panels = ws.registers.map((reg) => {
+    const st = states.get(reg.id);
+    let body: string;
+    if (!st || st.status === 'loading') body = `<div class="fx-empty fx-loading">${esc(t('loading'))}</div>`;
+    else if (st.status === 'error') body = `<div class="fx-alert">${esc(st.error)}</div>`;
+    else {
+      const rows = balances(reg, st.rows);
+      if (!rows.length) body = `<p class="fx-muted">${esc(t('noMovements'))}</p>`;
+      else {
+        const totals = Object.fromEntries(reg.resources.map((r) => [r.id, rows.reduce((n, x) => n + x.res[r.id], 0)]));
+        body = `<div class="fx-table-wrap"><table class="fx-table" data-balance="${esc(reg.id)}"><thead><tr>${reg.dimensions.map((d) => `<th>${esc(d.name)}</th>`).join('')}${reg.resources.map((r) => `<th class="fx-num">${esc(r.name)}</th>`).join('')}</tr></thead><tbody>${rows
+          .map((row) => `<tr>${reg.dimensions.map((d) => `<td>${d.target ? titleOf(d.target, row.dims[d.id]) : esc(row.dims[d.id] || '—')}</td>`).join('')}${reg.resources
+            .map((r) => `<td class="fx-num${row.res[r.id] < 0 ? ' fx-neg' : ''}">${esc(money(row.res[r.id], ctx.locale))}</td>`).join('')}</tr>`)
+          .join('')}</tbody><tfoot><tr><th colspan="${reg.dimensions.length}">${esc(t('total'))}</th>${reg.resources
+          .map((r) => `<th class="fx-num${totals[r.id] < 0 ? ' fx-neg' : ''}">${esc(money(totals[r.id], ctx.locale))}</th>`).join('')}</tr></tfoot></table></div>`;
+      }
+    }
+    return `<section class="fx-panel"><h3>${icon(reg.icon ?? 'Wallet', 16)}${esc(reg.name)}</h3>${body}</section>`;
+  });
+  return `<div class="fx-toolbar"><h2>${icon('Wallet', 20)}${esc(t('balances'))}</h2></div>
+<p class="fx-muted">${esc(t('balancesHint'))}</p>
+${panels.join('')}`;
 }

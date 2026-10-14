@@ -9,7 +9,8 @@ export type Selection =
   | { kind: 'entity'; id: string }
   | { kind: 'plugins' }
   | { kind: 'publish' }
-  | { kind: 'roles' };
+  | { kind: 'roles' }
+  | { kind: 'register'; id: string };
 
 export type WorkspaceTab = 'portal' | 'diagram' | 'json';
 

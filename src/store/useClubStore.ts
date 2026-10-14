@@ -4,12 +4,14 @@ import { temporal, type TemporalState } from 'zundo';
 import { buildPresetSchema } from '@/data/presets';
 import { normalizeSchema, normalizeView } from '@/utils/normalize';
 import { withRoles, CHAIR_ROLE } from '@/utils/access';
+import { buildAccountingPack, type AccountingPackId } from '@/data/accounting';
 import type { InstalledPlugin, PluginManifest } from '@/plugins/types';
 import { BUILTIN_BY_ID } from '@/plugins/catalog';
 import { defaultSettings, manifestOf } from '@/plugins/runtime';
 import type {
   AccessLevel,
   ClubEntity,
+  ClubRegister,
   ClubRole,
   ClubSchema,
   DashboardConfig,
@@ -81,6 +83,13 @@ export interface ClubState {
   removeRole: (id: string) => void;
   setRoleAccess: (roleId: string, entityId: string, level: AccessLevel) => void;
   setEntityPublic: (entityId: string, isPublic: boolean) => void;
+
+  /** Учёт: регистры остатков и операции. */
+  addAccountingPack: (pack: AccountingPackId) => void;
+  addRegister: (register: ClubRegister) => void;
+  updateRegister: (id: string, patch: Partial<ClubRegister>) => void;
+  removeRegister: (id: string) => void;
+  renameRegisterId: (id: string, nextId: string) => void;
 
   installPlugin: (idOrManifest: string | PluginManifest) => void;
   setPluginEnabled: (id: string, enabled: boolean) => void;
@@ -221,8 +230,12 @@ export const useClubStore = create<ClubState>()(
               delete access[id];
               return { ...r, access };
             });
+            const registers = s.schema.registers?.map((r) => ({
+              ...r,
+              dimensions: r.dimensions.map((d) => (d.target === id ? { ...d, target: nextId } : d)),
+            }));
             return {
-              schema: { ...s.schema, entities, roles },
+              schema: { ...s.schema, entities, roles, registers },
               seeds,
               activeEntityId: s.activeEntityId === id ? nextId : s.activeEntityId,
             };
@@ -331,6 +344,46 @@ export const useClubStore = create<ClubState>()(
               }),
             },
           })),
+
+        addAccountingPack: (pack) =>
+          set((s) => {
+            const { entities, registers } = buildAccountingPack(s.schema, pack);
+            return {
+              schema: {
+                ...s.schema,
+                entities: [...s.schema.entities, ...entities.map(withView)],
+                registers: [...(s.schema.registers ?? []), ...registers],
+              },
+              activeEntityId: entities[entities.length - 1]?.id ?? s.activeEntityId,
+            };
+          }),
+
+        addRegister: (register) =>
+          set((s) => ({ schema: { ...s.schema, registers: [...(s.schema.registers ?? []), register] } })),
+
+        updateRegister: (id, patch) =>
+          set((s) => ({ schema: { ...s.schema, registers: s.schema.registers?.map((r) => (r.id === id ? { ...r, ...patch, id: r.id, uid: r.uid } : r)) } })),
+
+        removeRegister: (id) =>
+          set((s) => ({
+            schema: {
+              ...s.schema,
+              registers: s.schema.registers?.filter((r) => r.id !== id),
+              entities: s.schema.entities.map((e) => (e.postings?.some((p) => p.register === id) ? { ...e, postings: e.postings.filter((p) => p.register !== id) } : e)),
+            },
+          })),
+
+        renameRegisterId: (id, nextId) =>
+          set((s) => {
+            if (id === nextId || s.schema.registers?.some((r) => r.id === nextId)) return s;
+            return {
+              schema: {
+                ...s.schema,
+                registers: s.schema.registers?.map((r) => (r.id === id ? { ...r, id: nextId, uid: r.uid ?? r.id } : r)),
+                entities: s.schema.entities.map((e) => (e.postings?.some((p) => p.register === id) ? { ...e, postings: e.postings.map((p) => (p.register === id ? { ...p, register: nextId } : p)) } : e)),
+              },
+            };
+          }),
 
         setEntityPublic: (entityId, isPublic) =>
           set((s) => ({ schema: mapEntity(s.schema, entityId, (e) => ({ ...e, public: isPublic || undefined })) })),
@@ -449,3 +502,6 @@ type HistoryState = TemporalState<Pick<ClubState, 'schema'>>;
 export function useHistory<T>(selector: (state: HistoryState) => T): T {
   return useStore(useClubStore.temporal, selector);
 }
+
+/** Стабильный пустой список для селекторов (новый [] в селекторе zustand вызывает бесконечный цикл). */
+export const NONE: never[] = [];

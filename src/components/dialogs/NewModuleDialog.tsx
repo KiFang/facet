@@ -7,6 +7,7 @@ import { useT, useUiLocale, type TKey } from '@/i18n';
 import { getEntityIcon } from '@/lib/icons';
 import { uniqueId } from '@/lib/id';
 import { RESERVED_COLLECTIONS } from '@/utils/validate';
+import { ACCOUNTING_PACKS, type AccountingPackId } from '@/data/accounting';
 import { manifestOf, pluginTemplates, tr } from '@/plugins/runtime';
 import { DialogContent, DialogFooter } from '../ui/Dialog';
 import { Button } from '../ui/Button';
@@ -133,11 +134,41 @@ export function NewModuleDialog() {
   };
 
   const fromPlugins = pluginTemplates(schema);
+  const dialogArg = useWorkbench((s) => s.dialogArg);
+
+  const addPack = (pack: AccountingPackId) => {
+    const before = new Set((useClubStore.getState().schema.registers ?? []).map((r) => r.id));
+    useClubStore.getState().addAccountingPack(pack);
+    const reg = (useClubStore.getState().schema.registers ?? []).find((r) => !before.has(r.id));
+    close();
+    if (reg) select({ kind: 'register', id: reg.id });
+  };
+  const addEmptyRegister = () => {
+    const regs = useClubStore.getState().schema.registers ?? [];
+    const id = uniqueId('register', regs.map((r) => r.id));
+    useClubStore.getState().addRegister({ id, name: t('reg.newName'), icon: 'Wallet', dimensions: [{ id: 'dim', name: t('reg.newDimension') }], resources: [{ id: 'qty', name: t('reg.newResource') }] });
+    close();
+    select({ kind: 'register', id });
+  };
+
+  const accounting = (
+    <div data-testid="accounting-packs">
+      <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-fg-subtle">{t('newModule.accounting')}</div>
+      <p className="mb-2 text-xs text-fg-muted">{t('newModule.accountingHint')}</p>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+        {ACCOUNTING_PACKS.map((p) => (
+          <Card key={p.id} testId={`pack-${p.id}`} icon={p.icon} title={p.title[locale]} meta={p.description[locale]} onClick={() => addPack(p.id)} />
+        ))}
+        <Card testId="pack-empty" icon="Box" title={t('newModule.emptyRegister')} meta={t('newModule.emptyRegisterHint')} onClick={addEmptyRegister} />
+      </div>
+    </div>
+  );
 
   return (
     <RadixDialog.Root open onOpenChange={(o) => !o && close()}>
       <DialogContent title={t('cmd.newModule')} description={t('newModule.desc')} icon={<Blocks className="h-4 w-4" />} className="w-[min(760px,calc(100vw-32px))]">
         <div className="min-h-0 flex-1 space-y-4 overflow-auto p-5">
+          {dialogArg === 'accounting' && accounting}
           <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
             {MODULE_TEMPLATES.map((tpl) => {
               const base = tpl.build((k: TKey) => t(k));
@@ -148,6 +179,7 @@ export function NewModuleDialog() {
               );
             })}
           </div>
+          {dialogArg !== 'accounting' && accounting}
           {fromPlugins.length > 0 && (
             <div>
               <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-fg-subtle">{t('newModule.fromPlugins')}</div>

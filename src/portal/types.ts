@@ -1,4 +1,4 @@
-import type { ClubEntity } from '@/types/schema';
+import type { ClubEntity, ClubRegister } from '@/types/schema';
 
 export interface PortalRecord {
   id: string;
@@ -27,6 +27,8 @@ export interface DataSource {
   create?(entity: ClubEntity, payload: RecordPayload): Promise<PortalRecord>;
   update?(entity: ClubEntity, id: string, payload: RecordPayload): Promise<PortalRecord>;
   remove?(entity: ClubEntity, id: string): Promise<void>;
+  /** Движения регистра остатков (учёт). */
+  movements?(register: ClubRegister): Promise<{ dims: Record<string, string>; res: Record<string, number>; period: string; op_collection?: string; op_id?: string }[]>;
 }
 
 export interface Router {

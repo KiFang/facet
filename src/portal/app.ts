@@ -2,14 +2,14 @@ import type { ClubEntity, ClubSchema, ViewType } from '@/types/schema';
 import { portalT } from './i18n';
 import { availableViews, relationsOf } from './model';
 import {
-  canWrite, filterRecords, recordsToCsv, renderDashboard, renderDetail, renderEmpty, renderEntityPage, renderShell, sortRecords,
+  canWrite, esc, filterRecords, recordsToCsv, renderDashboard, renderDetail, renderEmpty, renderEntityPage, renderShell, sortRecords,
   type EntityUiState, type LoadState, type RenderCtx,
 } from './render';
 import type { DataSource, PortalAssets, PortalRecord, Router } from './types';
-import { accessFor, ApiError, canManageStaff, legacyMode, type Session } from './session';
+import { accessFor, ApiError, canManageStaff, canReadRegister, legacyMode, type Session } from './session';
 import {
-  readForm, renderForm, renderLogin, renderProfile, renderStaff,
-  type FormState, type StaffState, type WorkspaceCtx,
+  readForm, renderBalances, renderForm, renderLogin, renderProfile, renderStaff,
+  type FormState, type MovementsState, type StaffState, type WorkspaceCtx,
 } from './workspace';
 
 export interface PortalOptions {
@@ -36,7 +36,7 @@ export interface PortalHandle {
 
 interface Route {
   /** Служебные страницы рабочего места. */
-  page?: 'login' | 'staff' | 'profile';
+  page?: 'login' | 'staff' | 'profile' | 'balances';
   entity: ClubEntity | null;
   recordId: string | null;
   /** Форма: создание (recordId = null) или изменение. */
@@ -77,6 +77,9 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
   let staffState: StaffState | undefined;
   let staffForm: FormState = {};
   let profileForm: FormState & { done?: boolean } = {};
+  let movements = new Map<string, MovementsState>();
+  /** Сообщение над страницей (ошибка проведения и т. п.); сбрасывается при переходе. */
+  let notice: { tone: 'error' | 'ok'; text: string } | null = null;
 
   const ws = (): WorkspaceCtx => {
     const user = session?.user() ?? null;
@@ -87,6 +90,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
       canStaff: !!session && canManageStaff(schema, user),
       writable: !!source.create,
       hasPublic: schema.entities.some((e) => e.public),
+      registers: !!source.movements ? (schema.registers ?? []).filter((r) => (session ? canReadRegister(schema, user, r) : true)) : [],
     };
   };
   /** Схема, урезанная до разделов, которые видит текущий пользователь. */
@@ -125,7 +129,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
 
   const parseRoute = (path: string): Route => {
     const [entityId, recordId, action] = path.replace(/^\/+/, '').split('/').map((s) => decodeURIComponent(s));
-    if (entityId === 'login' || entityId === 'staff' || entityId === 'profile') return { page: entityId, entity: null, recordId: null };
+    if (entityId === 'login' || entityId === 'staff' || entityId === 'profile' || entityId === 'balances') return { page: entityId, entity: null, recordId: null };
     const visible = visibleSchema();
     const entity = visible.entities.find((e) => e.id === entityId) ?? null;
     if (!entity && visible.dashboard?.enabled === false) return { entity: visible.entities[0] ?? null, recordId: null };
@@ -154,6 +158,27 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
     return { schema: visibleSchema(), t: portalT(locale), locale, source, assets, data: (id) => data.get(id), now: now(), ws: ws() };
   };
 
+  const loadMovements = () => {
+    for (const reg of ws().registers) {
+      if (movements.has(reg.id)) continue;
+      movements.set(reg.id, { status: 'loading' });
+      const gen = generation;
+      source.movements!(reg)
+        .then((rows) => ({ status: 'ok', rows }) as MovementsState)
+        .catch((err: Error) => ({ status: 'error', error: err.message }) as MovementsState)
+        .then((st) => {
+          if (gen !== generation) return;
+          movements.set(reg.id, st);
+          render();
+        });
+      // Названия записей для измерений-ссылок.
+      for (const d of reg.dimensions) {
+        const target = visibleSchema().entities.find((e) => e.id === d.target);
+        if (target) load(target);
+      }
+    }
+  };
+
   const loadStaff = () => {
     if (!session) return;
     staffState = { status: 'loading' };
@@ -176,6 +201,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
     if (key !== formKey) {
       formKey = key;
       formState = {};
+      if (renderedKey) notice = null;
     }
     if (route.page === 'login' || (needsLogin() && !c.schema.entities.length)) {
       body = renderLogin(c, loginState);
@@ -186,6 +212,13 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
         active = '/staff';
         if (!staffState) loadStaff();
         body = renderStaff(c, w, staffState, staffForm);
+      }
+    } else if (route.page === 'balances') {
+      active = '/balances';
+      if (!w.registers.length) body = needsLogin() ? renderLogin(c, loginState) : renderEmpty(c.t('noAccess'), c.t('noAccessHint'));
+      else {
+        loadMovements();
+        body = renderBalances(c, w, movements);
       }
     } else if (route.page === 'profile') {
       body = w.user ? renderProfile(c, w, profileForm) : renderLogin(c, loginState);
@@ -232,6 +265,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
     const caret = keepSearch ? focused!.selectionStart : null;
     const focusedId = focused && root.contains(focused) && !keepSearch ? focused.id : '';
     const snap = sameScreen ? snapshotForms(root) : null;
+    if (notice) body = `<div class="fx-alert${notice.tone === 'ok' ? ' fx-alert-ok' : ''}" role="alert" data-notice>${esc(notice.text)}</div>${body}`;
     root.innerHTML = renderShell(c, active, body);
     if (snap?.size) restoreForms(root, snap);
     if (focusedId) (root.querySelector(`#${CSS.escape(focusedId)}`) as HTMLElement | null)?.focus();
@@ -310,6 +344,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
     if (target.closest('[data-refresh]')) {
       generation++;
       data = new Map();
+      movements = new Map();
       staffState = undefined;
       render();
       return;
@@ -317,6 +352,23 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
     if (target.closest('[data-logout]')) {
       session?.logout();
       options.router.go('/');
+      return;
+    }
+    const postBtn = target.closest<HTMLElement>('[data-post]');
+    if (postBtn && entity && source.update) {
+      const recordId = parseRoute(options.router.get()).recordId;
+      if (!recordId) return;
+      source
+        .update(entity, recordId, { values: { posted: postBtn.dataset.post === 'true' }, files: {} })
+        .then(() => {
+          notice = null;
+          invalidate(entity.id);
+          render();
+        })
+        .catch((err: Error) => {
+          notice = { tone: 'error', text: err.message };
+          render();
+        });
       return;
     }
     const del = target.closest<HTMLElement>('[data-delete]');
@@ -328,7 +380,10 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
           invalidate(entity.id);
           options.router.go(`/${entity.id}`);
         })
-        .catch((err: Error) => alertError(err));
+        .catch((err: Error) => {
+          notice = { tone: 'error', text: err.message };
+          render();
+        });
       return;
     }
     const removeStaff = target.closest<HTMLElement>('[data-staff-remove]');
@@ -354,6 +409,8 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
   /** Сбрасывает кэш раздела и разделов, которые на него ссылаются (у них в expand старые названия). */
   const invalidate = (entityId: string) => {
     data.delete(entityId);
+    // Операция могла изменить остатки.
+    if (schema.entities.find((e) => e.id === entityId)?.kind === 'operation') movements = new Map();
     for (const e of schema.entities) if (relationsOf(schema, e).some((r) => r.targetEntityId === entityId)) data.delete(e.id);
   };
 

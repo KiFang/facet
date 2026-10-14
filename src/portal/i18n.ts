@@ -86,6 +86,16 @@ const ru = {
   noAccess: 'Нет доступа',
   noAccessHint: 'У вашей роли нет доступа к этому разделу.',
   publicOnly: 'Сейчас видны только открытые разделы. Войдите, чтобы работать с остальными.',
+  posted: 'Подтверждена',
+  postedHint: 'Подтверждённая операция учитывается в остатках',
+  draft: 'Черновик',
+  post: 'Подтвердить',
+  unpost: 'Отменить подтверждение',
+  balances: 'Остатки',
+  balancesHint: 'Считаются по подтверждённым операциям. Обновляются сразу после проведения.',
+  noMovements: 'Пока нет подтверждённых операций.',
+  total: 'Итого',
+  movementsCount: 'Операций: {n}',
 };
 
 export type PortalStrings = typeof ru;
@@ -176,6 +186,16 @@ const en: PortalStrings = {
   noAccess: 'No access',
   noAccessHint: 'Your role has no access to this section.',
   publicOnly: 'Only public sections are shown. Sign in to work with the rest.',
+  posted: 'Confirmed',
+  postedHint: 'Confirmed operations count towards balances',
+  draft: 'Draft',
+  post: 'Confirm',
+  unpost: 'Unconfirm',
+  balances: 'Balances',
+  balancesHint: 'Calculated from confirmed operations. Updated right after posting.',
+  noMovements: 'No confirmed operations yet.',
+  total: 'Total',
+  movementsCount: 'Operations: {n}',
 };
 
 const DICTS: Record<Locale, PortalStrings> = { ru, en };

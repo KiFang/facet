@@ -3,6 +3,7 @@ import { normalizeSchema } from '@/utils/normalize';
 import { validateManifest } from '@/plugins/runtime';
 import { BUILTIN_BY_ID } from '@/plugins/catalog';
 import { CHAIR_ROLE, isAccessLevel } from '@/utils/access';
+import { postingProblems } from '@/utils/registers';
 
 const FIELD_TYPES: FieldType[] = ['text', 'number', 'date', 'select', 'status', 'file', 'relation'];
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -70,6 +71,24 @@ export function validateSchema(input: unknown): ValidationResult {
     }
   }
 
+  if (s.registers !== undefined) {
+    if (!Array.isArray(s.registers)) errors.push('registers: массив');
+    else {
+      const ids = new Set<string>();
+      s.registers.forEach((r, i) => {
+        if (!isObj(r) || typeof r.id !== 'string' || !ID.test(r.id)) return errors.push(`registers[${i}].id: латиница, цифры и _`);
+        if (ids.has(r.id)) errors.push(`registers[${i}].id: «${r.id}» повторяется`);
+        ids.add(r.id);
+        if (typeof r.name !== 'string' || !r.name.trim()) errors.push(`registers[${i}].name: непустая строка`);
+        const dims = r.dimensions, res = r.resources;
+        if (!Array.isArray(dims) || !dims.length || dims.some((d) => !isObj(d) || typeof d.id !== 'string' || !ID.test(d.id)))
+          errors.push(`registers[${i}].dimensions: хотя бы одно измерение { id, name }`);
+        if (!Array.isArray(res) || !res.length || res.some((x) => !isObj(x) || typeof x.id !== 'string' || !ID.test(x.id)))
+          errors.push(`registers[${i}].resources: хотя бы один ресурс { id, name }`);
+      });
+    }
+  }
+
   const t = s.theme;
   if (!isObj(t)) {
     errors.push('theme: объект');
@@ -101,7 +120,7 @@ export function validateSchema(input: unknown): ValidationResult {
     s.entities.forEach((e, i) => {
       if (!isObj(e)) return errors.push(`entities[${i}]: объект`);
       if (typeof e.id !== 'string' || !ID.test(e.id)) errors.push(`entities[${i}].id: латиница a-z, 0-9, _`);
-      else if (RESERVED_COLLECTIONS.includes(e.id)) errors.push(`entities[${i}].id: «${e.id}» зарезервировано PocketBase`);
+      else if (RESERVED_COLLECTIONS.includes(e.id) || e.id.startsWith('reg_')) errors.push(`entities[${i}].id: «${e.id}» зарезервировано`);
       else if (ids.has(e.id)) errors.push(`entities[${i}].id: дубликат «${e.id}»`);
       else ids.add(e.id);
       if (e.uid !== undefined && typeof e.uid !== 'string') errors.push(`entities[${i}].uid: строка`);
@@ -164,5 +183,6 @@ export function validateSchema(input: unknown): ValidationResult {
     });
   }
 
+  if (!errors.length) errors.push(...postingProblems(input as unknown as ClubSchema));
   return errors.length ? { ok: false, errors } : { ok: true, errors, schema: normalizeSchema(input as unknown as ClubSchema) };
 }

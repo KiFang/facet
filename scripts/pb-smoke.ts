@@ -125,7 +125,7 @@ async function checkStructure(s: Server, schema: ClubSchema) {
     const extra = col.fields.filter((f: any) => !f.system && !['id', 'created', 'updated'].includes(f.name) && !pc.fields.some((pf) => pf.name === f.name));
     check(!extra.length, `  ${pc.name}: нет лишних полей${extra.length ? ` (${extra.map((f: any) => f.name).join(', ')})` : ''}`);
   }
-  const stale = cols.filter((c) => !c.system && !['users', 'staff'].includes(c.name) && !schema.entities.some((e) => e.id === c.name));
+  const stale = cols.filter((c) => !c.system && !['users', 'staff'].includes(c.name) && !c.name.startsWith('reg_') && !schema.entities.some((e) => e.id === c.name));
   check(!stale.length, `нет лишних коллекций${stale.length ? ` (${stale.map((c) => c.name).join(', ')})` : ''}`);
 }
 
@@ -493,12 +493,71 @@ async function roles() {
   }
 }
 
+async function accounting() {
+  console.log('\n▶ Учёт: операции и остатки');
+  useClubStore.getState().replaceSchema(normalizeSchema({ ...buildPresetSchema('general'), editorMode: 'pro' }));
+  useClubStore.getState().clearSeeds();
+  useClubStore.getState().addAccountingPack('cash');
+  useClubStore.getState().addAccountingPack('equipment');
+  const schema = useClubStore.getState().schema;
+  check(schema.registers?.length === 2 && schema.entities.some((e) => e.id === 'cash_ops') && schema.entities.some((e) => e.id === 'issues'), 'готовые решения: касса и выдача инвентаря');
+  check(!schema.entities.some((e) => e.id === 'inventory_2' || e.id === 'members_2'), 'выдача использует существующие разделы инвентаря и участников');
+  const seeds = { cash_ops: seedBatch('cash_ops', [{ title: 'Взносы сентябрь', date: '01.09.2026', type: 'Поступление', amount: '5 000', article: 'Взносы' }]) };
+  const bundle = await buildInstallBundle(schema, seeds, { password: PASSWORD });
+  check(bundle.files.some((f) => f.path.endsWith('pb_hooks/facet-registers.pb.js')), 'хук проведения в архиве');
+  const { root, data } = install(bundle, 'accounting');
+  const s = await serve(root, data);
+  const sum = async (reg: string, res: string, filter = '') => {
+    const rows = (await api<{ items: any[] }>(s, 'GET', `/api/collections/reg_${reg}/records?perPage=500${filter ? `&filter=${encodeURIComponent(filter)}` : ''}`)).data.items;
+    return rows.reduce((n, r) => n + (r[`r_${res}`] ?? 0), 0);
+  };
+  try {
+    await checkStructure(s, schema);
+    const seededOps = (await api<{ items: any[] }>(s, 'GET', '/api/collections/cash_ops/records')).data.items;
+    check(await sum('cash', 'amount') === 5000, `черновые операции проведены при установке: ${await sum('cash', 'amount')} (операций ${seededOps.length}, posted=${seededOps[0]?.posted})`);
+    if (await sum('cash', 'amount') !== 5000) console.log(s.log().split('\n').filter((l) => /facet|rror/i.test(l)).slice(0, 15).join('\n'));
+    const exp = await api<any>(s, 'POST', '/api/collections/cash_ops/records', { title: 'Пицца', date: '2026-09-05 12:00:00.000Z', type: 'Расход', amount: 1200, article: 'Мероприятия', posted: true });
+    check(exp.status === 200, 'расход проведён');
+    check(await sum('cash', 'amount') === 3800, `остаток кассы 3800: ${await sum('cash', 'amount')}`);
+    check(await sum('cash', 'amount', 'd_article = "Мероприятия"') === -1200, 'остаток по статье');
+    const draft = await api<any>(s, 'POST', '/api/collections/cash_ops/records', { title: 'Черновик', date: '2026-09-06 12:00:00.000Z', type: 'Расход', amount: 999, article: 'Прочее', posted: false });
+    check(draft.status === 200 && await sum('cash', 'amount') === 3800, 'неподтверждённая операция не влияет на остаток');
+    await api(s, 'PATCH', `/api/collections/cash_ops/records/${draft.data.id}`, { posted: true });
+    check(await sum('cash', 'amount') === 2801, 'подтверждение проводит операцию');
+    await api(s, 'PATCH', `/api/collections/cash_ops/records/${draft.data.id}`, { amount: 1 });
+    check(await sum('cash', 'amount') === 3799, 'изменение суммы перепроводит');
+    await api(s, 'DELETE', `/api/collections/cash_ops/records/${draft.data.id}`);
+    check(await sum('cash', 'amount') === 3800, 'удаление снимает движения');
+
+    const item = (await api<any>(s, 'POST', '/api/collections/inventory/records', { item: 'Проектор', quantity: 2, state: 'Доступно' })).data;
+    const anya = (await api<any>(s, 'POST', '/api/collections/members/records', { full_name: 'Аня', role: 'Президент' })).data;
+    const issue = await api<any>(s, 'POST', '/api/collections/issues/records', { date: '2026-09-10 10:00:00.000Z', type: 'Выдача', item: item.id, holder: anya.id, qty: 2, posted: true });
+    check(issue.status === 200, 'выдача проведена');
+    check(await sum('on_hand', 'qty', `d_holder = "${anya.id}"`) === 2, 'у Ани на руках 2');
+    const tooMuch = await api<any>(s, 'POST', '/api/collections/issues/records', { date: '2026-09-11 10:00:00.000Z', type: 'Возврат', item: item.id, holder: anya.id, qty: 3, posted: true });
+    check(tooMuch.status === 400 && /Недостаточно/.test(tooMuch.data?.message ?? ''), `вернуть больше, чем выдано, нельзя: ${tooMuch.data?.message}`);
+    const ret = await api<any>(s, 'POST', '/api/collections/issues/records', { date: '2026-09-12 10:00:00.000Z', type: 'Возврат', item: item.id, holder: anya.id, qty: 2, posted: true });
+    check(ret.status === 200 && await sum('on_hand', 'qty') === 0, 'возврат обнулил остаток');
+    const shrink = await api<any>(s, 'PATCH', `/api/collections/issues/records/${issue.data.id}`, { qty: 1 });
+    check(shrink.status === 400, 'нельзя уменьшить выдачу, если возврат уже больше');
+    const del = await api<any>(s, 'DELETE', `/api/collections/issues/records/${issue.data.id}`);
+    check(del.status === 400, 'нельзя удалить выдачу, по которой уже был возврат');
+    const anon = await api<{ items: unknown[] }>(s, 'GET', '/api/collections/reg_cash/records', undefined, true);
+    check(anon.status !== 200 || anon.data.items.length === 0, 'остатки закрыты для гостей');
+    const writeReg = await api<any>(s, 'POST', '/api/collections/reg_cash/records', { r_amount: 1 }, true);
+    check(writeReg.status >= 400, 'движения нельзя записать напрямую');
+  } finally {
+    s.proc.kill();
+  }
+}
+
 try {
   await presets();
   await update();
   await plugins();
   await dataEditor();
   await roles();
+  await accounting();
 } catch (err) {
   failures++;
   console.error(err);

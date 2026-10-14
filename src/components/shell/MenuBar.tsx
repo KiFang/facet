@@ -1,5 +1,5 @@
 import * as Menubar from '@radix-ui/react-menubar';
-import { useClubStore } from '@/store/useClubStore';
+import { useClubStore, NONE } from '@/store/useClubStore';
 import { useT, type TKey } from '@/i18n';
 import { manifestOf, tr } from '@/plugins/runtime';
 import { useUiLocale } from '@/i18n';
@@ -44,7 +44,7 @@ function Item({ command }: { command: Command }) {
 export function MenuBar({ commands }: { commands: Command[] }) {
   const t = useT();
   const locale = useUiLocale();
-  const plugins = useClubStore((s) => s.schema.plugins ?? []);
+  const plugins = useClubStore((s) => s.schema.plugins ?? NONE);
   const byId = new Map(commands.map((c) => [c.id, c]));
 
   return (

@@ -14,6 +14,8 @@ function facetField(def, app) {
       return new SelectField(Object.assign(base, { values: def.values || [], maxSelect: def.maxSelect || 1 }));
     case "file":
       return new FileField(Object.assign(base, { maxSelect: def.maxSelect || 1, maxSize: 10485760, thumbs: ["480x270"] }));
+    case "bool":
+      return new BoolField(base);
     case "relation":
       return new RelationField(Object.assign(base, {
         collectionId: app.findCollectionByNameOrId(def.target).id,

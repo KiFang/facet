@@ -1,4 +1,5 @@
-import type { AccessLevel, ClubEntity, ClubRole, ClubSchema } from '@/types/schema';
+import type { AccessLevel, ClubEntity, ClubRegister, ClubRole, ClubSchema } from '@/types/schema';
+import { registerReaders } from '@/utils/registers';
 import { accessOf, CHAIR_ROLE, STAFF_COLLECTION } from '@/utils/access';
 
 /** Сотрудник (учётная запись актива). */
@@ -53,6 +54,13 @@ export function accessFor(schema: ClubSchema, user: StaffUser | null, entity: Cl
   const role = roleOf(schema, user);
   if (!role) return entity.public ? 'read' : 'none';
   return accessOf(role, entity.id);
+}
+
+/** Видит ли пользователь остатки регистра (по доступу к операциям, которые в него пишут). */
+export function canReadRegister(schema: ClubSchema, user: StaffUser | null, reg: ClubRegister): boolean {
+  if (legacyMode(schema)) return true;
+  if (!user) return false;
+  return registerReaders(schema, reg).some((r) => r.id === user.role);
 }
 
 export function canManageStaff(schema: ClubSchema, user: StaffUser | null): boolean {

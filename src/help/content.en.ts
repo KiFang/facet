@@ -234,6 +234,23 @@ Until you save, changes are only marked: green **+** — new row; pencil and yel
 `,
   },
   {
+    id: 'accounting',
+    group: 'Data',
+    title: 'Accounting: operations and balances',
+    icon: 'Wallet',
+    body: `
+Like accounting software, Facet OS has **lists** (members, equipment), **operations** (cash entries, equipment loans) and **balance registers** (cash, equipment on loan).
+
+Use **Accounting → +** in the configuration for ready solutions: **Club cash** (income and expenses by category) and **Equipment loans** (who has what; you cannot return more than was issued).
+
+A confirmed operation writes movements to registers: income as “+”, expense as “−”. The **Balances** page of the workspace shows the totals. Editing or deleting an operation recalculates balances; **Unconfirm** turns it into a draft.
+
+>! With **Never below zero**, the server rejects an operation (or an edit or deletion) that would make a balance negative.
+
+For your own register, set **dimensions** (what the balance is counted by) and **resources** (what is summed), then add posting rules to an operation section in **Section type**.
+`,
+  },
+  {
     id: 'import',
     group: 'Data',
     title: 'Spreadsheet import',

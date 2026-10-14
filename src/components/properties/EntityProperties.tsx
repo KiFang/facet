@@ -3,7 +3,7 @@ import {
   ArrowDown, ArrowRight, ArrowUp, Calendar, CalendarDays, CircleDot, Columns3, Database, File, FileSpreadsheet, Hash,
   LayoutGrid, Link2, ListChecks, Plus, Table, Trash2, Type, X, type LucideIcon,
 } from 'lucide-react';
-import { useClubStore } from '@/store/useClubStore';
+import { useClubStore, NONE } from '@/store/useClubStore';
 import { useSettings } from '@/store/useSettings';
 import { useWorkbench } from '@/store/useWorkbench';
 import type { ClubEntity, EntityField, FieldType, RelationType, ViewType } from '@/types/schema';
@@ -23,6 +23,7 @@ import { Tip } from '../ui/Tooltip';
 import { toast } from '../ui/Toast';
 import { PropertyPage } from './PropertyPage';
 import { AccessCell } from './RolesProperties';
+import { PostingsEditor } from './PostingsEditor';
 import { accessOf, CHAIR_ROLE } from '@/utils/access';
 
 export const FIELD_ICONS: Record<FieldType, LucideIcon> = {
@@ -410,6 +411,20 @@ export function EntityProperties({ entity }: { entity: ClubEntity }) {
         </Section>
       )}
 
+      <Section title={t('kind.title')} action={<span className="text-2xs text-fg-subtle">{t('kind.hint')}</span>}>
+        <Segmented
+          ariaLabel={t('kind.title')}
+          value={entity.kind ?? 'catalog'}
+          onChange={(kind) => updateEntity(entity.id, { kind: kind === 'operation' ? 'operation' : undefined })}
+          options={[
+            { value: 'catalog', label: t('kind.catalog'), title: t('kind.catalogHint') },
+            { value: 'operation', label: t('kind.operation'), title: t('kind.operationHint') },
+          ]}
+        />
+        <p className="text-2xs text-fg-subtle">{entity.kind === 'operation' ? t('kind.operationHint') : t('kind.catalogHint')}</p>
+        {entity.kind === 'operation' && <PostingsEditor entity={entity} />}
+      </Section>
+
       <Section title={t('view.title')} action={<span className="text-2xs text-fg-subtle">{t('view.hint')}</span>}>
         <ViewEditor entity={entity} />
       </Section>
@@ -426,7 +441,7 @@ export function EntityProperties({ entity }: { entity: ClubEntity }) {
 
 function EntityAccess({ entity }: { entity: ClubEntity }) {
   const t = useT();
-  const roles = useClubStore((s) => s.schema.roles ?? []);
+  const roles = useClubStore((s) => s.schema.roles ?? NONE);
   const setRoleAccess = useClubStore((s) => s.setRoleAccess);
   const setEntityPublic = useClubStore((s) => s.setEntityPublic);
   return (

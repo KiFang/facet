@@ -129,7 +129,7 @@ class LocalServer {
       // Файлы плагинов генерируются целиком — убираем прежние (в т.ч. отключённых плагинов).
       const hooks = path.join(this.systemDir, 'pocketbase', 'pb_hooks');
       for (const f of fs.existsSync(hooks) ? fs.readdirSync(hooks) : []) {
-        if (/^plugin-.*\.pb\.js$/.test(f)) fs.rmSync(path.join(hooks, f));
+        if (/^plugin-.*\.pb\.js$/.test(f) || /^facet-registers\./.test(f)) fs.rmSync(path.join(hooks, f));
       }
       fs.rmSync(path.join(this.systemDir, 'web', 'plugins'), { recursive: true, force: true });
       const defaults = bundle.files.find((f) => f.path === 'env.defaults');

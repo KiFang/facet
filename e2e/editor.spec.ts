@@ -297,3 +297,49 @@ test('рабочее место в превью: роли, форма запис
   await pv.locator('form[data-staff-form] button[type=submit]').click();
   await expect(pv.locator('[data-staff-row]')).toHaveCount(5);
 });
+
+test('учёт: касса и выдача инвентаря, остатки и подтверждение', async ({ page }, info) => {
+  await page.getByTestId('nav-add-accounting').click();
+  await page.getByTestId('pack-cash').click();
+  await expect(page.getByTestId('nav-register-cash')).toBeVisible();
+  await page.getByTestId('nav-add-accounting').click();
+  await page.getByTestId('pack-equipment').click();
+  await expect(page.getByTestId('nav-register-on_hand')).toBeVisible();
+  await expect(page.getByText('Схема в порядке')).toBeVisible();
+
+  const pv = preview(page);
+  // Новая операция: приход 1000 по статье «Взносы» — сразу в остатках.
+  await pv.locator('[data-nav="/balances"]').first().click();
+  const before = await pv.locator('[data-balance="cash"] tfoot .fx-num').textContent();
+  await pv.locator('[data-nav="/cash_ops"]').first().click();
+  await pv.getByTestId('fx-add').click();
+  await pv.locator('input[name=title]').fill('Взносы октябрь');
+  await pv.locator('input[name=date]').fill('2026-10-01T12:00');
+  await pv.locator('select[name=type]').selectOption('Поступление');
+  await pv.locator('input[name=amount]').fill('1000');
+  await pv.locator('select[name=article]').selectOption('Взносы');
+  await expect(pv.locator('input[name=posted]')).toBeChecked();
+  await pv.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(pv.locator('.fx-posted-badge')).toBeVisible();
+  await pv.locator('[data-nav="/balances"]').first().click();
+  const toNum = (s: string | null) => Number((s ?? '0').replace(/\s/g, '').replace(',', '.'));
+  await expect.poll(async () => toNum(await pv.locator('[data-balance="cash"] tfoot .fx-num').textContent())).toBe(toNum(before) + 1000);
+
+  // Отмена подтверждения убирает операцию из остатков.
+  await pv.locator('[data-nav="/cash_ops"]').first().click();
+  await pv.getByRole('link', { name: 'Взносы октябрь' }).click();
+  await pv.getByRole('button', { name: 'Отменить подтверждение' }).click();
+  await expect(pv.locator('.fx-draft')).toBeVisible();
+  await pv.locator('[data-nav="/balances"]').first().click();
+  await expect.poll(async () => toNum(await pv.locator('[data-balance="cash"] tfoot .fx-num').textContent())).toBe(toNum(before));
+
+  // В архиве — хук проведения и коллекции регистров.
+  await page.keyboard.press('Control+KeyE');
+  const [d] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Скачать .zip/ }).click()]);
+  await d.saveAs(info.outputPath('accounting.zip'));
+  const { zip, names } = await zipFiles(info.outputPath('accounting.zip'));
+  expect(names.some((n) => n.endsWith('pb_hooks/facet-registers.pb.js'))).toBe(true);
+  const init = await zip.file(names.find((n) => n.endsWith('_facet_init.js'))!)!.async('string');
+  expect(init).toContain('"reg_cash"');
+  expect(init).toContain('"reg_on_hand"');
+});

@@ -2,6 +2,7 @@ import type { ClubEntity, ClubSchema, EntityField } from '@/types/schema';
 import { resolveRelations } from '@/utils/relations';
 import { parseDateValue, parseNumberValue, splitLinks } from '@/utils/migrations/seeds';
 import { titleFieldOf } from '../model';
+import { movementsOf } from '@/utils/registers';
 import type { DataSource, PortalRecord, RecordPayload } from '../types';
 
 export const SAMPLE_ROWS = 6;
@@ -105,6 +106,12 @@ export function buildSampleData(
         updated: pbDate(new Date(now.getTime() - i * 3 * 3600_000)),
       };
       for (const f of entity.fields) if (f.type !== 'relation') rec[f.id] = sampleScalar(schema, entity, f, i, now);
+      // Примеры операций: приходы чаще расходов, последняя — черновик.
+      if (entity.kind === 'operation') {
+        rec.posted = i < SAMPLE_ROWS - 1;
+        const dir = entity.postings?.[0]?.direction;
+        if (dir && typeof dir === 'object') rec[dir.field] = (i % 3 === 2 ? dir.out[0] : dir.in[0]) ?? rec[dir.field];
+      }
       records.push(rec);
     }
     byEntity.set(entity.id, records);
@@ -187,6 +194,16 @@ export function sampleSource(
     },
     async remove(entity, id) {
       byEntity.set(entity.id, (byEntity.get(entity.id) ?? []).filter((r) => r.id !== id));
+    },
+    async movements(reg) {
+      const out: { dims: Record<string, string>; res: Record<string, number>; period: string; op_collection: string; op_id: string }[] = [];
+      for (const e of schema.entities) {
+        if (!e.postings?.some((p) => p.register === reg.id)) continue;
+        for (const rec of byEntity.get(e.id) ?? []) {
+          for (const m of movementsOf(schema, e, rec)) if (m.register === reg.id) out.push({ ...m, op_collection: e.id, op_id: rec.id });
+        }
+      }
+      return out;
     },
   };
 }

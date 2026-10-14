@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen, Boxes, ChevronLeft, ChevronRight, FileSpreadsheet, Flag, Home, Keyboard, LayoutGrid, LayoutPanelLeft, LifeBuoy, Link2, Palette, Plug, Printer, Rocket, Search, Server,
-  Settings, ShieldCheck, Table2, X, type LucideIcon,
+  Settings, ShieldCheck, Table2, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import { useT, useUiLocale } from '@/i18n';
 import { cn } from '@/lib/cn';
@@ -13,7 +13,7 @@ import { Markdown, headingsOf, plain } from './markdown';
 import type { HelpSection } from './types';
 
 const ICONS: Record<string, LucideIcon> = {
-  Rocket, LayoutPanelLeft, Flag, Boxes, Link2, LayoutGrid, Palette, Home, Table2, FileSpreadsheet, Plug, Server, Settings, Keyboard, LifeBuoy, ShieldCheck,
+  Rocket, LayoutPanelLeft, Flag, Boxes, Link2, LayoutGrid, Palette, Home, Table2, FileSpreadsheet, Plug, Server, Settings, Keyboard, LifeBuoy, ShieldCheck, Wallet,
 };
 
 const fromHash = () => decodeURIComponent(location.hash.slice(1)).split('/');
