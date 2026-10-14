@@ -43,5 +43,7 @@ if [ -n "$FILES" ] && [ -f "$FILES" ]; then
 fi
 
 echo "→ Запускаю…"
-docker compose up -d --build --wait
+# --force-recreate: club-schema.json и конфиги смонтированы файлами — после распаковки (новый inode)
+# контейнер иначе продолжит видеть прежние версии.
+docker compose up -d --build --force-recreate --wait
 echo "✓ Восстановлено из $SRC"

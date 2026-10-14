@@ -75,7 +75,8 @@ done < "$HERE/env.defaults"
 chmod +x "$TARGET"/*.sh
 
 echo "→ Пересобираю и запускаю (миграции применятся автоматически)…"
-if ! (cd "$TARGET" && docker compose up -d --build --wait); then
+# --force-recreate: файлы, смонтированные по одному (club-schema.json, конфиги Nginx), должны подхватиться заново.
+if ! (cd "$TARGET" && docker compose up -d --build --force-recreate --wait); then
   echo "✗ Портал не поднялся. Логи: (cd $TARGET && docker compose logs pocketbase)"
   echo "  Откат к прежней версии: (cd $TARGET && ./restore.sh backups/update-$STAMP)"
   exit 3
