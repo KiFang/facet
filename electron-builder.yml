@@ -1,0 +1,65 @@
+# Facet OS — десктопный установщик (собирается в GitHub Actions: .github/workflows/desktop.yml)
+appId: os.facet.desktop
+productName: Facet OS
+executableName: facet-os
+copyright: Facet OS contributors
+directories:
+  output: release
+  buildResources: desktop/build
+files:
+  - dist/**/*
+  - desktop/main.cjs
+  - desktop/preload.cjs
+  - desktop/local-server.cjs
+  - desktop/build/icon.png
+  - package.json
+  # Всё нужное редактору уже собрано Vite в dist/ — зависимости из node_modules не нужны.
+  - "!node_modules/**/*"
+extraResources:
+  # PocketBase под платформу сборки (scripts/fetch-pocketbase.mjs)
+  - from: desktop/bin/${os}-${arch}
+    to: pocketbase
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: desktop/build/icon.png
+  artifactName: Facet-OS-Setup-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Facet OS
+  multiLanguageInstaller: true
+  installerLanguages: [ru_RU, en_US]
+  language: "1049"
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.productivity
+  icon: desktop/build/icon.png
+  # Подпись ad-hoc: без сертификата Apple, но приложение запускается на Apple Silicon.
+  identity: "-"
+  hardenedRuntime: false
+  artifactName: Facet-OS-${version}-${arch}.${ext}
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  category: Office
+  syncDesktopName: true
+  icon: desktop/build/icon.png
+  maintainer: Facet OS <noreply@facet.os>
+  synopsis: No-code система управления студенческим клубом
+  artifactName: Facet-OS-${version}-${arch}.${ext}
+
+publish: null

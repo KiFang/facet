@@ -1,7 +1,7 @@
 {
   "name": "facet-os",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Facet OS — visual no-code builder of self-hosted portals for student clubs and guilds",
   "type": "module",
   "scripts": {
@@ -12,7 +12,11 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "smoke:pb": "vite-node scripts/pb-smoke.ts --",
-    "export": "vite-node scripts/facet-export.ts --"
+    "export": "vite-node scripts/facet-export.ts --",
+    "desktop": "npm run build && electron .",
+    "desktop:dev": "FACET_DEV_URL=http://127.0.0.1:5173 electron .",
+    "desktop:dist": "npm run build && electron-builder",
+    "test:desktop": "playwright test --config playwright.desktop.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.2",
@@ -40,11 +44,20 @@
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.25.12",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.6.3",
     "vite": "^6.0.7",
     "vitest": "^3.2.7"
-  }
+  },
+  "main": "desktop/main.cjs",
+  "author": {
+    "name": "Facet OS contributors",
+    "email": "noreply@facet.os"
+  },
+  "homepage": "https://github.com/KiFang/facet",
+  "desktopName": "facet-os.desktop"
 }

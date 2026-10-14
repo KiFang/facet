@@ -61,6 +61,21 @@ jobs:
           unzip -q pb.zip pocketbase -d pb
       - run: npm run smoke:pb -- --pb ./pb/pocketbase
 
+  desktop:
+    name: Desktop app (Linux, unpackaged)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/fetch-pocketbase.mjs linux-x64
+      - run: npm run build
+      - run: sudo apt-get update && sudo apt-get install -y xvfb
+      - run: xvfb-run -a npm run test:desktop
+
   docker:
     name: Self-host bundle in Docker
     runs-on: ubuntu-latest

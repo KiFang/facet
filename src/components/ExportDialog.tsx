@@ -1,28 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertOctagon, AlertTriangle, Check, CircleCheck, Copy, Database, Download, FileCode2, FolderTree, Loader2, Package,
-  PackagePlus, RefreshCcw, ServerCog, Upload,
+  AlertTriangle, Check, Copy, Database, Download, FileCode2, FolderTree, Loader2, Package,
+  Monitor, PackagePlus, RefreshCcw, ServerCog, Upload,
 } from 'lucide-react';
 import { useClubStore } from '@/store/useClubStore';
 import { buildInstallBundle, buildUpdateBundle, exportFolderName, generateSchemaJson, type ExportBundle } from '@/utils/exporter';
 import { downloadBundle, downloadSingleFile } from '@/utils/download';
 import { validateSchema } from '@/utils/validate';
-import { describeChange } from '@/utils/migrations/describe';
-import type { SchemaChange } from '@/utils/migrations/diff';
 import { useT, useUiLocale } from '@/i18n';
+import { desktop } from '@/desktop';
+import { LocalServerPanel } from './LocalServerPanel';
+import { ChangesList } from './ChangesList';
 import { cn } from '@/lib/cn';
 import { Button } from './ui/Button';
 import { DialogContent } from './ui/Dialog';
 import { Segmented } from './ui/Segmented';
 import { toast } from './ui/Toast';
 
-type Kind = ExportBundle['kind'];
-
-const SEVERITY_STYLE: Record<SchemaChange['severity'], { icon: typeof Check; cls: string }> = {
-  safe: { icon: CircleCheck, cls: 'text-emerald-300' },
-  warning: { icon: AlertTriangle, cls: 'text-amber-300' },
-  danger: { icon: AlertOctagon, cls: 'text-rose-300' },
-};
+type Kind = ExportBundle['kind'] | 'local';
 
 function BaselinePanel() {
   const t = useT();
@@ -72,32 +67,6 @@ function BaselinePanel() {
   );
 }
 
-function ChangesList({ bundle }: { bundle: ExportBundle }) {
-  const t = useT();
-  const locale = useUiLocale();
-  const changes = bundle.diff.changes;
-  return (
-    <div className="max-h-48 space-y-1 overflow-auto rounded-xl border border-zinc-800 p-3 text-sm">
-      {changes.length === 0 && !bundle.seededRows && <p className="text-zinc-400">{t('update.noChanges')}</p>}
-      {changes.map((c, i) => {
-        const { icon: Icon, cls } = SEVERITY_STYLE[c.severity];
-        return (
-          <div key={i} className={cn('flex items-start gap-2', cls)}>
-            <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>{describeChange(c, locale)}</span>
-          </div>
-        );
-      })}
-      {bundle.seededRows > 0 && (
-        <div className="flex items-start gap-2 text-emerald-300">
-          <Database className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>{t('export.seeded', { n: bundle.seededRows })}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Содержимое диалога «Экспорт в Self-Host». Монтируется при открытии. */
 export function ExportDialogContent({ onDone }: { onDone: () => void }) {
   const t = useT();
@@ -105,7 +74,8 @@ export function ExportDialogContent({ onDone }: { onDone: () => void }) {
   const seeds = useClubStore((s) => s.seeds);
   const baseline = useClubStore((s) => s.baseline);
   const validation = useMemo(() => validateSchema(schema), [schema]);
-  const [kind, setKind] = useState<Kind>(baseline ? 'update' : 'install');
+  const onDesktop = !!desktop();
+  const [kind, setKind] = useState<Kind>(onDesktop ? 'local' : baseline ? 'update' : 'install');
   const [bundle, setBundle] = useState<ExportBundle | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -115,6 +85,7 @@ export function ExportDialogContent({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     let alive = true;
     setBundle(null);
+    if (kind === 'local') return;
     const build = kind === 'update' && baseline ? buildUpdateBundle(baseline, schema, seeds) : buildInstallBundle(schema, seeds);
     void build.then((b) => alive && setBundle(b));
     return () => {
@@ -158,7 +129,10 @@ export function ExportDialogContent({ onDone }: { onDone: () => void }) {
     : `cd ${bundle?.folder ?? '…'} && ./apply-update.sh /opt/${exportFolderName(schema)}`;
 
   return (
-    <DialogContent title={t('export.title')} description={t(kind === 'install' ? 'export.descInstall' : 'export.descUpdate')}>
+    <DialogContent
+      title={t('export.title')}
+      description={t(kind === 'local' ? 'local.desc' : kind === 'install' ? 'export.descInstall' : 'export.descUpdate')}
+    >
       <div className="flex flex-wrap items-center gap-3 border-b border-zinc-800 px-6 py-3">
         <Segmented<Kind>
           ariaLabel={t('export.kind')}
@@ -166,6 +140,7 @@ export function ExportDialogContent({ onDone }: { onDone: () => void }) {
           value={kind}
           onChange={setKind}
           options={[
+            ...(onDesktop ? [{ value: 'local' as const, label: <><Monitor className="h-3.5 w-3.5" /> {t('local.tab')}</> }] : []),
             { value: 'install', label: <><PackagePlus className="h-3.5 w-3.5" /> {t('export.install')}</> },
             { value: 'update', label: <><RefreshCcw className="h-3.5 w-3.5" /> {t('export.update')}</> },
           ]}
@@ -177,6 +152,10 @@ export function ExportDialogContent({ onDone }: { onDone: () => void }) {
         )}
       </div>
 
+      {kind === 'local' ? (
+        <LocalServerPanel />
+      ) : (
+      <>
       {kind === 'update' && (
         <div className="space-y-3 border-b border-zinc-800 px-6 py-4">
           <BaselinePanel />
@@ -266,6 +245,8 @@ export function ExportDialogContent({ onDone }: { onDone: () => void }) {
           {t(kind === 'install' ? 'export.downloadInstall' : 'export.downloadUpdate', { n: files.length })}
         </Button>
       </div>
+      </>
+      )}
     </DialogContent>
   );
 }

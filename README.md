@@ -12,6 +12,28 @@ npm run dev      # редактор на http://localhost:5173
 npm run build    # проверка типов + production-сборка в dist/
 ```
 
+## Приложение для ПК
+
+Facet OS можно установить как обычную программу — **Windows** (`.exe`), **macOS** (`.dmg`, Apple Silicon и Intel),
+**Linux** (AppImage, `.deb`). Установщики собирает GitHub Actions (`.github/workflows/desktop.yml`):
+артефакты каждой сборки — во вкладке Actions, а тег `v*` публикует их в Releases.
+
+В приложении в диалоге экспорта есть вкладка **«На этом ПК»**: система клуба (PocketBase входит в установщик)
+запускается прямо на компьютере — без Docker и сервера. Портал и панель управления открываются в браузере,
+по желанию — доступ с других устройств в той же Wi-Fi сети. Изменения структуры применяются как обновления
+без потери данных, перед каждым делается копия, есть откат. Данные лежат в папке пользователя
+(кнопка «Папка данных»).
+
+```bash
+npm run desktop                                      # собрать редактор и открыть приложение
+node scripts/fetch-pocketbase.mjs linux-x64          # PocketBase для локального запуска (win-x64, mac-arm64, mac-x64)
+npm run desktop:dist                                 # установщик для текущей ОС → release/
+xvfb-run -a npm run test:desktop                     # e2e приложения (FACET_ELECTRON_BIN — путь к упакованному)
+```
+
+Установщики не подписаны платными сертификатами: Windows покажет «Windows защитила ваш компьютер»
+(«Подробнее» → «Выполнить в любом случае»), macOS при первом запуске — правый клик → «Открыть».
+
 ## Что умеет редактор
 
 | Режим | Что доступно |
@@ -94,8 +116,9 @@ src/
 ├── i18n/                      # интерфейс редактора: ru / en
 ├── data/                      # пресеты и шаблоны сообщества
 └── export-templates/          # Dockerfile, nginx, Caddyfile, хуки, shell-скрипты, runtime миграций
-scripts/                       # CLI экспорта, смоук на PocketBase
-e2e/                           # Playwright
+desktop/                       # Electron: главный процесс, preload, локальный сервер клуба, иконка
+scripts/                       # CLI экспорта, смоук на PocketBase, загрузка PocketBase для установщика
+e2e/, e2e-desktop/             # Playwright: редактор в браузере и десктопное приложение
 ```
 
-Стек: React + TypeScript + Vite, Tailwind CSS, Radix UI, Zustand + zundo, lucide, JSZip. Сервер клуба — PocketBase 0.25, Nginx, Caddy.
+Стек: React + TypeScript + Vite, Electron, Tailwind CSS, Radix UI, Zustand + zundo, lucide, JSZip. Сервер клуба — PocketBase 0.25, Nginx, Caddy.

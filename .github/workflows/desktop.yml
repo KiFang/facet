@@ -1,0 +1,119 @@
+name: Desktop installers
+
+# Установщики Facet OS для ПК: Windows (.exe), macOS (.dmg, Apple Silicon и Intel), Linux (AppImage, .deb).
+# Каждый собранный пакет проверяется e2e-тестом: установка системы клуба на «этот ПК»,
+# обновление без потери данных, откат. Тег v* публикует GitHub Release с установщиками.
+on:
+  push:
+    tags: ['v*']
+    branches: ['**']
+    paths:
+      - desktop/**
+      - e2e-desktop/**
+      - electron-builder.yml
+      - scripts/fetch-pocketbase.mjs
+      - .github/workflows/desktop.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            pocketbase: win-x64
+            builder: --win --x64
+            artifacts: release/*.exe
+          - name: macOS
+            os: macos-latest
+            pocketbase: mac-arm64 mac-x64
+            builder: --mac --arm64 --x64
+            artifacts: release/*.dmg
+          - name: Linux
+            os: ubuntu-latest
+            pocketbase: linux-x64
+            builder: --linux --x64
+            artifacts: |
+              release/*.AppImage
+              release/*.deb
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: PocketBase for the installer
+        run: node scripts/fetch-pocketbase.mjs ${{ matrix.pocketbase }}
+      - run: npm run build
+      - name: Build installer
+        run: npx electron-builder ${{ matrix.builder }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Find packaged app
+        run: |
+          case "$RUNNER_OS" in
+            Windows) BIN="$PWD/release/win-unpacked/facet-os.exe" ;;
+            macOS)   BIN="$(ls -d "$PWD"/release/mac-arm64/*.app)/Contents/MacOS/$(ls "$(ls -d "$PWD"/release/mac-arm64/*.app)/Contents/MacOS" | head -1)" ;;
+            Linux)   BIN="$PWD/release/linux-unpacked/facet-os" ;;
+          esac
+          test -x "$BIN" || { echo "не найден $BIN"; ls -R release | head -50; exit 1; }
+          echo "FACET_ELECTRON_BIN=$BIN" >> "$GITHUB_ENV"
+      - name: Install Xvfb
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: E2E on the packaged app
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a npm run test:desktop; else npm run test:desktop; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Facet-OS-${{ matrix.name }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: desktop-test-results-${{ matrix.name }}
+          path: test-results/
+          retention-days: 7
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Facet-OS-*
+          path: installers
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: installers/*
+          generate_release_notes: true
+          body: |
+            ## Установка
+            - **Windows:** `Facet-OS-Setup-*.exe`. Если появится «Windows защитила ваш компьютер» — «Подробнее» → «Выполнить в любом случае» (установщик не подписан сертификатом).
+            - **macOS:** `.dmg` для Apple Silicon (`arm64`) или Intel (`x64`). Перетащите в «Программы»; при первом запуске — правый клик → «Открыть» (или «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть»).
+            - **Linux:** `.AppImage` (сделайте исполняемым) или `.deb` (`sudo apt install ./Facet-OS-*.deb`).

@@ -5,3 +5,5 @@ dist
 *.tsbuildinfo
 test-results
 playwright-report
+release
+desktop/bin
