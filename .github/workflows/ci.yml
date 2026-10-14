@@ -111,8 +111,9 @@ jobs:
           curl -sSI "$B/" | grep -qi "content-security-policy: default-src 'self'"
           curl -sSI "$B/" | grep -qi 'x-frame-options: SAMEORIGIN'
           curl -sSI "$B/" | grep -qi 'x-content-type-options: nosniff'
-          test "$(curl -s -o /dev/null -w '%{http_code}' "$B/api/collections/events/records")" = 200
-          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{}' "$B/api/collections/events/records")" = 403
+          # Разделы закрыты для гостей: список пустой, запись запрещена.
+          curl -fsS "$B/api/collections/events/records" | jq -e '.totalItems == 0'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{}' "$B/api/collections/events/records")" -ge 400
 
       - name: Superuser from .env, hooks applied, seed a record
         run: |
@@ -125,6 +126,11 @@ jobs:
           curl -fsS -H "Authorization: $TOKEN" "$B/api/settings" | jq -e '.backups.cron == "0 3 * * *" and .meta.appName == "Гильдия Северного кампуса"'
           curl -fsS -X POST -H "Authorization: $TOKEN" -H 'content-type: application/json' \
             -d '{"full_name":"Аня","role":"Президент"}' "$B/api/collections/members/records" | jq -e '.id'
+          # Рабочее место: председатель входит с данными администратора и видит записи.
+          STAFF=$(curl -fsS -X POST -H 'content-type: application/json' \
+            -d '{"identity":"admin@gildiya-severnogo-kampusa.club","password":"ci-password-12345"}' \
+            "$B/api/collections/staff/auth-with-password" | jq -r .token)
+          curl -fsS -H "Authorization: $STAFF" "$B/api/collections/members/records" | jq -e '.totalItems == 1'
 
       - name: backup.sh / restore.sh
         run: |
@@ -133,7 +139,7 @@ jobs:
           ./backup.sh
           ARCHIVE=$(ls backups/pb_data-*.tar.gz | head -1)
           YES=1 ./restore.sh "$ARCHIVE"
-          curl -fsS "http://127.0.0.1:8080/api/collections/members/records" | jq -e '.totalItems == 1'
+          curl -fsS -H "Authorization: $TOKEN" "http://127.0.0.1:8080/api/collections/members/records" | jq -e '.totalItems == 1'
 
       - name: Wrong base is rejected
         run: |
@@ -150,7 +156,7 @@ jobs:
           npm run export -- --schema next.json --base "$PORTAL/club-schema.json" --out ./update
           YES=1 ./update/*-update-*/apply-update.sh "$PORTAL"
           B=http://127.0.0.1:8080
-          curl -fsS "$B/api/collections/members/records" | jq -e '.items[0].name == "Аня" and (.items[0] | has("email"))'
+          curl -fsS -H "Authorization: $TOKEN" "$B/api/collections/members/records" | jq -e '.items[0].name == "Аня" and (.items[0] | has("email"))'
           curl -fsS "$B/club-schema.json" | jq -e '.clubName | endswith("v2")'
           ls -d "$PORTAL"/backups/update-*
           # Переименование клуба не должно создавать новый пустой том с базой.
@@ -161,7 +167,7 @@ jobs:
           set -eux
           cd "$PORTAL"
           YES=1 ./restore.sh "$(ls -d backups/update-* | head -1)"
-          curl -fsS "http://127.0.0.1:8080/api/collections/members/records" | jq -e '.items[0].full_name == "Аня" and (.items[0] | has("email") | not)'
+          curl -fsS -H "Authorization: $TOKEN" "http://127.0.0.1:8080/api/collections/members/records" | jq -e '.items[0].full_name == "Аня" and (.items[0] | has("email") | not)'
           curl -fsS "http://127.0.0.1:8080/club-schema.json" | jq -e '.clubName | endswith("v2") | not'
 
       - name: Login rate limit

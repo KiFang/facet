@@ -250,6 +250,42 @@ When creating a section, choose **From spreadsheet** to derive fields from the c
 `,
   },
   {
+    id: 'roles',
+    group: 'System',
+    title: 'Roles & access',
+    icon: 'ShieldCheck',
+    body: `
+Facet OS is the club team's internal system. Like an accounting system, it is used by staff (chair, treasurer, storekeeper, organizers), not by every member.
+
+## Roles
+
+**System → Roles & access** in the configuration. Ready roles: **Chair**, **Treasurer**, **Storekeeper**, **Organizer**. Rename them, add your own, delete any except the chair. **Manages staff** lets a role add people, assign roles and reset passwords.
+
+## Permissions by section
+
+Each matrix cell is a role's access to a section; a click cycles **no access → view → edit**. The **Default** row applies to sections without their own setting and to new sections. The same settings appear in section properties, **Access** block.
+
+## Public sections
+
+**Visible without sign-in** opens a section to guests (for example an event listing). Only roles with edit rights can still change it.
+
+> Check permissions right in the preview: use **View as** above the portal.
+
+>! After changing roles, export an update — permissions apply on the server once it is installed.
+`,
+  },
+  {
+    id: 'workspace',
+    group: 'System',
+    title: 'Team workspace',
+    icon: 'Table2',
+    body: `
+The workspace is the club portal after signing in. Staff see only their role's sections and can add, edit and delete records where the role has edit rights.
+
+The first sign-in is the chair with the admin email and password from \`.env\`; the chair then adds others on the **Staff** page (name, email, role, password), changes roles and resets passwords. Everyone changes their own password in **Profile** (click your name in the header).
+`,
+  },
+  {
     id: 'plugins',
     group: 'System',
     title: 'Plugins',
@@ -288,7 +324,7 @@ See \`docs/PLUGINS.md\` in the repository to write your own.
 
 1. Copy it to a Linux server and unpack.
 2. Run \`sudo ./install.sh\` (with a domain: \`sudo ./install.sh club.example.org\` — HTTPS is set up automatically).
-3. Open the address printed by the script. Admin credentials are in \`.env\`. Details are in \`DEPLOY.md\` inside the archive.
+3. Open the address printed by the script and sign in to the workspace as the chair with the admin email and password from \`.env\`. Details are in \`DEPLOY.md\` inside the archive.
 
 ## Updates
 

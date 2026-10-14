@@ -254,3 +254,46 @@ test('редактор данных: вставка из Excel, правка и 
   await page.bringToFront();
   await expect(preview(page).getByText('Оля Тестова').first()).toBeVisible();
 });
+
+test('рабочее место в превью: роли, форма записи, сотрудники', async ({ page }) => {
+  const pv = preview(page);
+  // Председатель: создаёт запись через форму, обязательные поля проверяются.
+  await pv.locator('[data-nav="/members"]').first().click();
+  await pv.getByTestId('fx-add').click();
+  await pv.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(pv.locator('.fx-field-error')).toHaveCount(2);
+  await pv.locator('input[name=full_name]').fill('Новый Участник');
+  await pv.locator('select[name=role]').selectOption({ index: 1 });
+  await pv.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(pv.locator('.fx-detail h2')).toHaveText('Новый Участник');
+  await pv.getByTestId('fx-edit').click();
+  await pv.locator('input[name=faculty]').fill('ФКН');
+  await pv.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(pv.locator('.fx-detail')).toContainText('ФКН');
+
+  // Казначей: инвентарь только просмотр — кнопки «Добавить» нет.
+  await page.getByTestId('preview-view-as').selectOption('treasurer');
+  await pv.locator('[data-nav="/inventory"]').first().click();
+  await expect(pv.locator('.fx-toolbar h2')).toContainText('Инвентарь');
+  await expect(pv.getByTestId('fx-add')).toHaveCount(0);
+  await expect(pv.locator('[data-nav="/staff"]')).toHaveCount(0);
+
+  // Права из конфигуратора сразу действуют: даём казначею изменение инвентаря.
+  await page.getByTestId('nav-roles').click();
+  await page.getByTestId('access-inventory').locator('[data-level]').nth(1).click();
+  await expect(pv.getByTestId('fx-add')).toBeVisible();
+
+  // Гость видит только вход.
+  await page.getByTestId('preview-view-as').selectOption('');
+  await expect(pv.locator('form[data-login]')).toBeVisible();
+
+  // Председатель управляет составом.
+  await page.getByTestId('preview-view-as').selectOption('chair');
+  await pv.locator('[data-nav="/staff"]').first().click();
+  await expect(pv.locator('[data-staff-row]')).toHaveCount(4);
+  await pv.locator('#fx-staff-name').fill('Катя');
+  await pv.locator('#fx-staff-email').fill('katya@club.test');
+  await pv.locator('#fx-staff-password').fill('katya-pass-123');
+  await pv.locator('form[data-staff-form] button[type=submit]').click();
+  await expect(pv.locator('[data-staff-row]')).toHaveCount(5);
+});

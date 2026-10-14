@@ -3,6 +3,7 @@ import type { ClubSchema } from '@/types/schema';
 import { normalizeSchema } from '@/utils/normalize';
 import { hashRouter, mountPortal } from './app';
 import { pocketbaseSource } from './sources/pocketbase';
+import { pocketbaseSession } from './session';
 import { esc } from './render';
 
 type RenderInfo = { path: string; entityId: string | null; recordId: string | null; root: HTMLElement };
@@ -40,9 +41,11 @@ fetch('/club-schema.json', { cache: 'no-cache' })
     window.FacetPortal!.schema = schema;
     document.title = schema.clubName;
     document.documentElement.lang = schema.locale ?? 'ru';
+    const session = pocketbaseSession();
     mountPortal(root, {
       schema,
-      source: pocketbaseSource(),
+      session,
+      source: pocketbaseSource('', session.token),
       router: hashRouter(),
       assets: { logoUrl: root.dataset.logo || undefined },
       onRender: (info) => renderListeners.forEach((cb) => {

@@ -8,6 +8,7 @@ import {
   portalFeatureSet, recordTitle, relationsOf, statusFieldOf, titleFieldOf,
 } from './model';
 import type { DataSource, PortalAssets, PortalRecord } from './types';
+import { renderUserBar, type WorkspaceCtx } from './workspace';
 
 /* Чистые функции: состояние → HTML-строка. Никакого DOM — легко тестировать и встраивать в превью. */
 
@@ -30,6 +31,13 @@ export interface RenderCtx {
   assets: PortalAssets;
   data: (entityId: string) => LoadState | undefined;
   now: Date;
+  /** Рабочее место: пользователь и права. Нет — режим просмотра (тесты, старые схемы). */
+  ws?: WorkspaceCtx;
+}
+
+/** Может ли текущий пользователь менять раздел прямо в портале. */
+export function canWrite(ctx: RenderCtx, entity: ClubEntity): boolean {
+  return !!ctx.ws && !ctx.ws.legacy && ctx.ws.writable && ctx.ws.access(entity) === 'write';
 }
 
 export interface EntityUiState {
@@ -122,7 +130,11 @@ export function renderShell(ctx: RenderCtx, active: string, body: string): strin
   const { schema, t } = ctx;
   const dashboard = schema.dashboard?.enabled !== false;
   const logo = ctx.assets.logoUrl ? `<img class="fx-logo" src="${esc(ctx.assets.logoUrl)}" alt="">` : '';
-  const admin = schema.entities[0] ? ctx.source.editUrl(schema.entities[0]) : null;
+  const legacy = !ctx.ws || ctx.ws.legacy;
+  const admin = legacy && schema.entities[0] ? ctx.source.editUrl(schema.entities[0]) : null;
+  const staffTab = ctx.ws?.canStaff
+    ? `<a class="fx-tab" ${navAttr('/staff')}${active === '/staff' ? ' aria-current="page"' : ''}>${icon('Users', 15)}${esc(t('staff'))}</a>`
+    : '';
   const tabs = [
     dashboard ? `<a class="fx-tab" ${navAttr('/')}${active === '' ? ' aria-current="page"' : ''}>${icon('House', 15)}${esc(t('home'))}</a>` : '',
     ...schema.entities.map((e) => {
@@ -130,6 +142,7 @@ export function renderShell(ctx: RenderCtx, active: string, body: string): strin
       const count = state?.status === 'ok' ? `<span class="fx-count">${state.records.length}</span>` : '';
       return `<a class="fx-tab" ${navAttr(`/${e.id}`)}${active === e.id ? ' aria-current="page"' : ''}>${icon(e.icon, 15)}${esc(e.pluralName)}${count}</a>`;
     }),
+    staffTab,
   ].join('');
 
   return `<div class="fx-shell">
@@ -138,6 +151,7 @@ export function renderShell(ctx: RenderCtx, active: string, body: string): strin
   <div class="fx-hero-actions">
     <button type="button" class="fx-btn fx-btn-ghost" data-refresh title="${esc(t('refresh'))}" aria-label="${esc(t('refresh'))}">${icon('RefreshCw', 15)}</button>
     ${admin ? `<a class="fx-btn fx-btn-accent" href="${esc(admin.replace(/\?.*$/, ''))}" target="_blank" rel="noopener">${icon('ExternalLink', 15)}${esc(t('admin'))}</a>` : ''}
+    ${ctx.ws ? renderUserBar(ctx, ctx.ws) : ''}
   </div>
 </header>
 <nav class="fx-nav">${tabs}</nav>
@@ -191,9 +205,11 @@ export function renderEntityPage(ctx: RenderCtx, entity: ClubEntity, ui: EntityU
     features.has('csv') ? `<button type="button" class="fx-btn fx-btn-ghost" data-csv title="${esc(t('csvTitle'))}">${icon('FileText', 15)}${esc(t('csv'))}</button>` : '',
     features.has('print') ? `<button type="button" class="fx-btn fx-btn-ghost" data-print>${icon('Ticket', 15)}${esc(t('print'))}</button>` : '',
   ].join('');
+  const writable = canWrite(ctx, entity);
+  const addBtn = writable ? `<a class="fx-btn fx-btn-accent" data-testid="fx-add" ${navAttr(`/${entity.id}/new`)}>${icon('Plus', 15)}${esc(t('add'))}</a>` : '';
   const head = `<div class="fx-toolbar">
   <h2>${icon(entity.icon, 20)}${esc(entity.pluralName)}</h2>
-  <div class="fx-toolbar-actions">${tools}${switcher}<label class="fx-search-wrap">${icon('Search', 15)}<input class="fx-search" type="search" data-search placeholder="${esc(t('search'))}" value="${esc(ui.query)}" aria-label="${esc(t('search'))}"></label></div>
+  <div class="fx-toolbar-actions">${addBtn}${tools}${switcher}<label class="fx-search-wrap">${icon('Search', 15)}<input class="fx-search" type="search" data-search placeholder="${esc(t('search'))}" value="${esc(ui.query)}" aria-label="${esc(t('search'))}"></label></div>
 </div><hr class="fx-divider">`;
 
   const loading = renderLoadState(ctx, ctx.data(entity.id));
@@ -201,9 +217,12 @@ export function renderEntityPage(ctx: RenderCtx, entity: ClubEntity, ui: EntityU
   const all = (ctx.data(entity.id) as Extract<LoadState, { status: 'ok' }>).records;
 
   if (!all.length) {
-    const url = ctx.source.editUrl(entity);
+    if (writable) {
+      return head + renderEmpty(t('empty'), t('addFirstHere', { name: entity.name }), `<a class="fx-btn fx-btn-accent" ${navAttr(`/${entity.id}/new`)}>${icon('Plus', 15)}${esc(t('add'))}</a>`);
+    }
+    const url = !ctx.ws || ctx.ws.legacy ? ctx.source.editUrl(entity) : null;
     const action = url ? `<a class="fx-btn" href="${esc(url)}" target="_blank" rel="noopener">${icon('ExternalLink', 15)}${esc(t('openCollection'))}</a>` : '';
-    return head + renderEmpty(t('empty'), t('addFirst', { name: entity.name }), action);
+    return head + renderEmpty(t('empty'), url ? t('addFirst', { name: entity.name }) : '', action);
   }
   const records = filterRecords(ctx, entity, all, ui.query);
   if (!records.length) return head + renderEmpty(t('nothingFound'), t('tryAnother'));
@@ -418,7 +437,8 @@ export function renderDetail(ctx: RenderCtx, entity: ClubEntity, recordId: strin
   if (!record) return back + renderEmpty(t('recordNotFound'), t('recordNotFoundHint'));
 
   const status = statusFieldOf(entity);
-  const editUrl = ctx.source.editUrl(entity, record);
+  const editUrl = !ctx.ws || ctx.ws.legacy ? ctx.source.editUrl(entity, record) : null;
+  const writable = canWrite(ctx, entity);
   const images = entity.fields
     .filter((f) => f.type === 'file')
     .flatMap((f) => fileNames(record[f.id]).filter(isImage))
@@ -462,6 +482,10 @@ export function renderDetail(ctx: RenderCtx, entity: ClubEntity, recordId: strin
       portalFeatureSet(ctx.schema).has('print') ? `<button type="button" class="fx-btn fx-btn-ghost" data-print>${icon('Ticket', 15)}${esc(t('print'))}</button>` : ''
     }${
       editUrl ? `<a class="fx-btn" href="${esc(editUrl)}" target="_blank" rel="noopener">${icon('Pencil', 15)}${esc(t('edit'))}</a>` : ''
+    }${
+      writable
+        ? `<a class="fx-btn fx-btn-accent" data-testid="fx-edit" ${navAttr(`/${entity.id}/${record.id}/edit`)}>${icon('Pencil', 15)}${esc(t('edit'))}</a><button type="button" class="fx-btn fx-btn-ghost fx-danger" data-delete="${esc(record.id)}" data-title="${esc(recordTitle(entity, record, t('untitled')))}">${icon('Trash2', 15)}${esc(t('delete'))}</button>`
+        : ''
     }</div>
   </header>
   ${images.length ? `<div class="fx-gallery">${images.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}

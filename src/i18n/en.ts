@@ -651,4 +651,7 @@ export const en: UiStrings = {
   'roles.section': "Section",
   'roles.default': "Default",
   'roles.matrixHint': "Click a cell: no access → view → edit. The “Default” row applies to new sections and sections without their own setting.",
+
+  'preview.viewAs': "View as",
+  'preview.guest': "Guest (signed out)",
 };

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSettings, type PreviewViewport } from '@/store/useSettings';
 import { pluginCss } from '@/plugins/runtime';
-import { Lock, Monitor, Smartphone, Tablet } from 'lucide-react';
+import { Lock, Monitor, Smartphone, Tablet, UserRound } from 'lucide-react';
 import { useClubStore } from '@/store/useClubStore';
 import { cssVarsToText, dividerCss, fontStylesheetUrl, themeToCssVars } from '@/utils/theme';
 import { mountPortal, memoryRouter, type PortalHandle } from '@/portal/app';
 import { sampleSource } from '@/portal/sources/sample';
+import { previewSession } from '@/portal/session';
+import { CHAIR_ROLE } from '@/utils/access';
 import portalCss from '@/portal/portal.css?raw';
 import { slugify } from '@/lib/id';
 import { useT } from '@/i18n';
@@ -44,6 +46,15 @@ export function LivePreview() {
   const [path, setPath] = useState(routerRef.current.get());
 
   const source = useMemo(() => sampleSource(schema, seeds), [schema, seeds]);
+  // «Смотреть как»: роль из схемы или гость (без входа).
+  const [viewAs, setViewAs] = useState<string>(CHAIR_ROLE);
+  const roles = schema.roles;
+  const roleKey = roles?.map((r) => `${r.id}:${r.name}`).join('|') ?? '';
+  const effectiveRole = viewAs && roles?.some((r) => r.id === viewAs) ? viewAs : viewAs ? CHAIR_ROLE : '';
+  const session = useMemo(
+    () => (roles?.length ? previewSession(useClubStore.getState().schema, effectiveRole || null) : undefined),
+    [roleKey, effectiveRole], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const assets = useMemo(() => ({ logoUrl: schema.theme.logo }), [schema.theme.logo]);
   useFontStylesheet(fontStylesheetUrl(schema.theme.font));
 
@@ -58,8 +69,10 @@ export function LivePreview() {
     portalRef.current = mountPortal(hostRef.current!, {
       schema: useClubStore.getState().schema,
       source,
+      session,
       router,
       assets,
+      confirm: (text) => window.confirm(text),
       onEntityChange: (id) => {
         const store = useClubStore.getState();
         if (id && id !== store.activeEntityId) store.setActiveEntity(id);
@@ -75,8 +88,8 @@ export function LivePreview() {
   }, []);
 
   useEffect(() => {
-    portalRef.current?.update({ schema, source, assets });
-  }, [schema, source, assets]);
+    portalRef.current?.update({ schema, source, assets, ...(session ? { session } : {}) });
+  }, [schema, source, assets, session]);
 
   // Выбор раздела в конструкторе открывает его в превью.
   useEffect(() => {
@@ -98,6 +111,22 @@ export function LivePreview() {
           {t('preview.title')}
           {Object.keys(seeds).length > 0 && <span className="rounded-full bg-success-soft px-2 py-0.5 text-2xs text-success">{t('preview.realData')}</span>}
         </div>
+        <div className="ml-auto flex items-center gap-2">
+        {roles?.length ? (
+          <label className="flex items-center gap-1.5 text-2xs text-fg-muted">
+            <UserRound className="h-3.5 w-3.5" />
+            {t('preview.viewAs')}
+            <select
+              data-testid="preview-view-as"
+              className="h-6 rounded border border-line bg-panel px-1.5 text-xs text-fg"
+              value={effectiveRole}
+              onChange={(e) => setViewAs(e.target.value)}
+            >
+              {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              <option value="">{t('preview.guest')}</option>
+            </select>
+          </label>
+        ) : null}
         <Segmented
           size="sm"
           ariaLabel={t('preview.viewport')}
@@ -110,6 +139,7 @@ export function LivePreview() {
             { value: 'mobile', label: <Smartphone className="h-3.5 w-3.5" />, title: t('preview.mobile') },
           ]}
         />
+        </div>
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-auto p-4">

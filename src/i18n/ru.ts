@@ -650,6 +650,9 @@ export const ru = {
   'roles.section': "Раздел",
   'roles.default': "По умолчанию",
   'roles.matrixHint': "Щелчок по ячейке: нет доступа → просмотр → изменение. Строка «По умолчанию» действует на новые разделы и разделы без отдельной настройки.",
+
+  'preview.viewAs': "Смотреть как",
+  'preview.guest': "Гость (без входа)",
 };
 
 export type UiStrings = typeof ru;

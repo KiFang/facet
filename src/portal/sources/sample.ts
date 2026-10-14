@@ -2,7 +2,7 @@ import type { ClubEntity, ClubSchema, EntityField } from '@/types/schema';
 import { resolveRelations } from '@/utils/relations';
 import { parseDateValue, parseNumberValue, splitLinks } from '@/utils/migrations/seeds';
 import { titleFieldOf } from '../model';
-import type { DataSource, PortalRecord } from '../types';
+import type { DataSource, PortalRecord, RecordPayload } from '../types';
 
 export const SAMPLE_ROWS = 6;
 
@@ -147,9 +147,46 @@ export function sampleSource(
   now = new Date(),
 ): DataSource {
   const { byEntity } = buildSampleData(schema, seeds, now);
+  // Примеры можно менять в превью рабочего места — изменения живут до перезагрузки.
+  const withExpand = (entity: ClubEntity, rec: PortalRecord): PortalRecord => {
+    const expand: NonNullable<PortalRecord['expand']> = {};
+    for (const r of resolveRelations(entity, schema)) {
+      const targets = byEntity.get(r.targetEntityId) ?? [];
+      const ids = Array.isArray(rec[r.name]) ? (rec[r.name] as string[]) : rec[r.name] ? [String(rec[r.name])] : [];
+      const picked = ids.map((id) => targets.find((t) => t.id === id)).filter((x): x is PortalRecord => !!x);
+      if (picked.length) expand[r.name] = r.multiple ? picked : picked[0];
+    }
+    return { ...rec, expand };
+  };
+  const apply = (rec: PortalRecord, payload: RecordPayload) => {
+    Object.assign(rec, payload.values);
+    for (const [k, f] of Object.entries(payload.files)) rec[k] = f ? f.name : '';
+    rec.updated = pbDate(new Date());
+  };
+  let seq = 0;
   return {
     list: async (entity) => byEntity.get(entity.id) ?? [],
     fileUrl: () => null,
     editUrl: () => null,
+    async create(entity, payload) {
+      const rec: PortalRecord = { id: `${entity.id}-new-${++seq}`, created: pbDate(new Date()) };
+      apply(rec, payload);
+      const full = withExpand(entity, rec);
+      byEntity.set(entity.id, [full, ...(byEntity.get(entity.id) ?? [])]);
+      return full;
+    },
+    async update(entity, id, payload) {
+      const list = byEntity.get(entity.id) ?? [];
+      const idx = list.findIndex((r) => r.id === id);
+      if (idx < 0) throw new Error('404');
+      const rec = { ...list[idx] };
+      apply(rec, payload);
+      const full = withExpand(entity, rec);
+      byEntity.set(entity.id, list.map((r, i) => (i === idx ? full : r)));
+      return full;
+    },
+    async remove(entity, id) {
+      byEntity.set(entity.id, (byEntity.get(entity.id) ?? []).filter((r) => r.id !== id));
+    },
   };
 }

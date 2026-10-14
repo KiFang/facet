@@ -181,7 +181,43 @@
 }
 
 /* ---------- печать (плагин «Печать и выгрузка») ---------- */
+/* ---------- рабочее место: формы, вход, сотрудники ---------- */
+.fx-panel.fx-form { display: flex; flex-direction: column; gap: var(--fx-gap); }
+.fx-form h2, .fx-form h3 { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.fx-form h2 { font-size: 1.25em; }
+.fx-form h2 .fx-icon, .fx-form h3 .fx-icon { color: var(--fx-primary); }
+.fx-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: calc(var(--fx-gap) * .8) var(--fx-gap); }
+.fx-form-row { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.fx-label { font-size: .88em; font-weight: 600; color: var(--fx-muted); }
+.fx-req { color: #dc2626; }
+.fx-input { width: 100%; font: inherit; color: var(--fx-text); background: var(--fx-bg); border: max(1px, var(--fx-border-width)) solid var(--fx-border-color); border-radius: var(--fx-radius-sm); padding: calc(var(--fx-pad) * .45) calc(var(--fx-pad) * .6); }
+.fx-input:focus { outline: 2px solid var(--fx-primary); outline-offset: 1px; }
+textarea.fx-input { resize: vertical; min-height: 84px; }
+.fx-field-error { color: #dc2626; font-size: .85em; }
+.fx-form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.fx-btn:disabled { opacity: .6; cursor: progress; }
+.fx-wide { width: 100%; justify-content: center; }
+.fx-danger { color: #dc2626 !important; }
+.fx-alert { padding: calc(var(--fx-pad) * .55) calc(var(--fx-pad) * .8); border-radius: var(--fx-radius-sm); background: rgba(220, 38, 38, .08); border: 1px solid rgba(220, 38, 38, .3); color: #b91c1c; }
+.fx-alert-ok { background: rgba(22, 163, 74, .08); border-color: rgba(22, 163, 74, .3); color: #15803d; }
+.fx-alert-info { background: var(--fx-primary-soft); border-color: transparent; color: var(--fx-text); }
+.fx-check { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 3px 0; }
+.fx-check input { accent-color: var(--fx-primary); width: 16px; height: 16px; }
+.fx-multi { display: flex; flex-direction: column; gap: 6px; }
+.fx-multi-list { max-height: 210px; overflow: auto; padding: 6px 10px; border: max(1px, var(--fx-border-width)) solid var(--fx-border-color); border-radius: var(--fx-radius-sm); background: var(--fx-bg); }
+.fx-file { display: flex; flex-direction: column; gap: 6px; }
+.fx-login { display: flex; justify-content: center; padding: calc(var(--fx-pad) * 2) 0; }
+.fx-login-card { width: min(420px, 100%); display: flex; flex-direction: column; gap: var(--fx-gap); }
+.fx-login-card h2 { display: flex; align-items: center; gap: 10px; font-size: 1.3em; }
+.fx-user { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: var(--fx-radius-sm); background: rgba(255,255,255,.16); text-decoration: none; color: var(--fx-on-primary) !important; }
+.fx-user span { display: flex; flex-direction: column; line-height: 1.15; }
+.fx-user small { opacity: .8; font-size: .78em; }
+.fx-td-actions { white-space: nowrap; text-align: right; }
+.fx-td-actions .fx-btn { margin-left: 6px; padding: 4px 8px; }
+.fx-table select.fx-input { padding: 4px 6px; min-width: 140px; }
+
 @media print {
+  .fx-user, [data-logout], .fx-form-actions, [data-delete], [data-testid="fx-add"], [data-testid="fx-edit"] { display: none !important; }
   .fx-root { background: #fff !important; color: #000 !important; font-size: 11pt; }
   .fx-nav, .fx-hero-actions, .fx-toolbar-actions, .fx-footer, .fx-back, .fx-detail-actions .fx-btn, .fx-views { display: none !important; }
   .fx-shell { max-width: none; padding: 0; gap: 12px; }
