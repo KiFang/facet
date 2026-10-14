@@ -18,6 +18,7 @@ import { toPhysical } from '@/utils/migrations/physical';
 import { useClubStore, type SeedBatch } from '@/store/useClubStore';
 import type { ClubSchema, PresetId } from '@/types/schema';
 import { writeBundle } from './lib';
+import { serverSource } from '@/datagrid/sources';
 
 const args = process.argv.slice(2).filter((a) => a !== '--');
 const PB = path.resolve(args[args.indexOf('--pb') + 1] ?? '');
@@ -279,9 +280,114 @@ async function update() {
   check(!noop.files.some((f) => f.path.includes('pb_migrations')) && noop.diff.ops.length === 0, 'без изменений структуры миграция не создаётся');
 }
 
+/* --------------------------------- plugins ---------------------------------- */
+
+async function plugins() {
+  console.log('\n▶ Плагины');
+  const store = useClubStore.getState();
+  store.replaceSchema(normalizeSchema({ ...buildPresetSchema('general'), editorMode: 'pro' }));
+  const a = useClubStore.getState();
+  a.addField('events', { id: 'number', name: 'Номер', type: 'text', required: false });
+  a.installPlugin('autonumber');
+  a.setPluginSettings('autonumber', { entity: 'events', field: 'number', prefix: 'EV-{YYYY}-', digits: 4 });
+  a.installPlugin('audit-log');
+  a.installPlugin('telegram');
+  a.setPluginSettings('telegram', { chatId: '-100', entities: ['events'], onCreate: true, onUpdate: true, onDelete: false });
+  a.setPluginSecret('telegram', 'bot_token', 'dummy-token');
+  a.installPlugin('portal-tools');
+  const schema = useClubStore.getState().schema;
+  check(schema.entities.some((e) => e.id === 'audit_log'), 'журнал изменений добавил раздел audit_log');
+
+  const bundle = await buildInstallBundle(schema, {}, { password: PASSWORD, secrets: useClubStore.getState().pluginSecrets });
+  const hookFiles = bundle.files.filter((f) => f.path.includes('pb_hooks/plugin-')).map((f) => f.path.split('/').pop());
+  check(hookFiles.length === 3, `хуки плагинов в архиве: ${hookFiles.join(', ')}`);
+  const env = bundle.files.find((f) => f.path === '.env')!.content;
+  check(env.includes('FACET_PLUGIN_TELEGRAM_BOT_TOKEN=dummy-token'), 'секрет Telegram — в .env');
+  check(!bundle.files.find((f) => f.path === 'club-schema.json')!.content.includes('dummy-token'), 'секрет не попал в club-schema.json');
+
+  const { root, data } = install(bundle, 'plugins');
+  const s = await serve(root, data);
+  try {
+    const e1 = (await api(s, 'POST', '/api/collections/events/records', { title: 'Кикофф', starts_at: '2026-10-20 18:00:00.000Z', status: 'Запланировано' })).data;
+    const e2 = (await api(s, 'POST', '/api/collections/events/records', { title: 'Квиз', starts_at: '2026-10-21 18:00:00.000Z', status: 'Запланировано' })).data;
+    const e3 = (await api(s, 'POST', '/api/collections/events/records', { title: 'Ручной', number: 'MANUAL-1', starts_at: '2026-10-22 18:00:00.000Z', status: 'Запланировано' })).data;
+    const year = new Date().getFullYear();
+    check(e1.number === `EV-${year}-0001` && e2.number === `EV-${year}-0002`, `автонумерация: ${e1.number}, ${e2.number}`);
+    check(e3.number === 'MANUAL-1', 'автонумерация не трогает заполненный номер');
+    await api(s, 'PATCH', `/api/collections/events/records/${e1.id}`, { status: 'Завершено' });
+    await api(s, 'DELETE', `/api/collections/events/records/${e2.id}`);
+    const audit = await list(s, 'audit_log', '&sort=created');
+    const actions = audit.map((r) => r.action);
+    check(actions.filter((x) => x === 'Создание').length === 3 && actions.includes('Изменение') && actions.includes('Удаление'), `журнал: ${actions.join(', ')}`);
+    const upd = audit.find((r) => r.action === 'Изменение');
+    check(upd?.changes === 'Статус' && upd?.section === 'Мероприятие' && upd?.author === 'admin@gildiya-severnogo-kampusa.club', `журнал: поля «${upd?.changes}», автор ${upd?.author}`);
+    check(audit.every((r) => r.record), 'журнал: названия записей');
+    await new Promise((r) => setTimeout(r, 500));
+    check(/\[facet:telegram\]/.test(s.log()), 'хук Telegram выполнился и отправил запрос');
+    console.log(`    лог Telegram: ${(s.log().match(/\[facet:telegram\][^\n]*/) ?? ['(сеть до api.telegram.org — без ошибок)'])[0].slice(0, 120)}`);
+    check((await fetch(`${s.url}/api/health`)).ok, 'сервер жив после всех хуков');
+  } finally {
+    s.proc.kill();
+  }
+}
+
+async function dataEditor() {
+  console.log('\n▶ Редактор данных (живой сервер)');
+  useClubStore.getState().replaceSchema(normalizeSchema({ ...buildPresetSchema('general'), editorMode: 'pro' }));
+  useClubStore.getState().clearSeeds();
+  const schema = useClubStore.getState().schema;
+  const bundle = await buildInstallBundle(schema, { members: seedBatch('members', [{ full_name: 'Анна Иванова', role: 'Президент' }, { full_name: 'Борис Петров', role: 'Президент' }]) }, { password: PASSWORD });
+  const { root, data } = install(bundle, 'datagrid');
+  const s = await serve(root, data);
+  try {
+    const src = serverSource({ url: s.url, token: s.token, email: 'admin' });
+    const events = schema.entities.find((e) => e.id === 'events')!;
+    const cols = await src.columns(events);
+    check(cols.some((c) => c.key === 'members' && c.type === 'relation' && c.multiple) && !cols.some((c) => c.missing), `колонки: ${cols.map((c) => c.key).join(', ')}`);
+    const opts = await src.relationOptions('members');
+    check(opts.length === 2 && opts.some((o) => o.label === 'Анна Иванова'), 'варианты связи — записи участников по названию');
+    for (const title of ['Кикофф', 'Квиз']) await api(s, 'POST', '/api/collections/events/records', { title, starts_at: '2026-10-01 18:00:00.000Z', status: 'Запланировано' });
+    const before = await src.load(events, cols);
+    check(before.length === 2 && before[0].values.starts_at === '2026-10-01 18:00', `загрузка записей: ${before.length}`);
+    const ids = opts.map((o) => o.value);
+    const poster = new File([new Uint8Array([137, 80, 78, 71])], 'poster.png', { type: 'image/png' });
+    const res = await src.save(events, cols, {
+      created: [
+        { key: 'n1', values: { title: 'Турнир', starts_at: '2026-10-20 18:30', status: 'Запланировано', capacity: 12, members: ids }, files: { poster } },
+        { key: 'n2', values: { title: '', starts_at: '2026-10-21 10:00', status: 'Запланировано' }, files: {} },
+      ],
+      updated: [{ key: before[0].key, patch: { location: 'Актовый зал' }, files: {} }],
+      deleted: [before[1].key],
+      order: [],
+    });
+    check(res.saved === 3, `сохранено: ${res.saved} (создание, изменение, удаление)`);
+    check(Object.keys(res.errors).join() === 'n2' && !!res.errors.n2.title, `ошибка сервера по строке: ${JSON.stringify(res.errors)}`);
+    const after = await src.load(events, cols);
+    const created = after.find((r) => r.values.title === 'Турнир');
+    check(created?.values.starts_at === '2026-10-20 18:30', `дата без сдвига часового пояса: ${created?.values.starts_at}`);
+    check(JSON.stringify(created?.values.members) === JSON.stringify(ids) && created?.values.capacity === 12, 'связь «много» и число сохранены');
+    check(Array.isArray(created?.values.poster) && String((created?.values.poster as string[])[0]).startsWith('poster'), `файл загружен: ${created?.values.poster}`);
+    const href = created && src.fileUrl?.(events, created, (created.values.poster as string[])[0]);
+    check(!!href && (await fetch(href)).ok, 'файл доступен по ссылке');
+    check(after.find((r) => r.key === before[0].key)?.values.location === 'Актовый зал', 'изменение записи сохранено');
+    check(!after.some((r) => r.key === before[1].key), 'удаление записи');
+    // Раздел, которого ещё нет на сервере
+    const extra = { ...events, id: 'not_deployed', fields: events.fields.slice(0, 1), relations: [] };
+    const missing = await src.columns(extra).then(() => 'ok', (e: Error) => e.message);
+    check(missing.startsWith('collection-missing'), `раздел без коллекции: ${missing}`);
+    const withNewField = { ...events, fields: [...events.fields, { id: 'new_field', name: 'Новое', type: 'text' as const, required: false }] };
+    const cols2 = await src.columns(withNewField);
+    check(cols2.find((c) => c.key === 'new_field')?.missing === true, 'поле без колонки на сервере — только чтение');
+  } finally {
+    s.proc.kill();
+  }
+}
+
 try {
   await presets();
   await update();
+  await plugins();
+  await dataEditor();
 } catch (err) {
   failures++;
   console.error(err);

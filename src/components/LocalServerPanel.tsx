@@ -84,22 +84,22 @@ export function LocalServerPanel() {
   };
 
   if (!info) {
-    return <div className="grid min-h-[320px] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-violet-400" /></div>;
+    return <div className="grid min-h-[320px] place-items-center"><Loader2 className="h-6 w-6 animate-spin text-accent" /></div>;
   }
 
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-auto px-6 py-5">
       {/* Статус */}
-      <div className="flex flex-wrap items-center gap-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+      <div className="flex flex-wrap items-center gap-4 rounded-lg border border-line bg-sunken p-4">
         <span className={cn('relative flex h-3 w-3', !info.running && 'opacity-60')}>
-          {info.running && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />}
-          <span className={cn('relative inline-flex h-3 w-3 rounded-full', info.running ? 'bg-emerald-400' : info.installed ? 'bg-zinc-500' : 'bg-zinc-700')} />
+          {info.running && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />}
+          <span className={cn('relative inline-flex h-3 w-3 rounded-full', info.running ? 'bg-success' : info.installed ? 'bg-fg-subtle' : 'bg-line-strong')} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-zinc-100">
+          <div className="font-semibold text-fg">
             {t(info.running ? 'local.running' : info.installed ? 'local.stopped' : 'local.notInstalled')}
           </div>
-          <div className="truncate text-xs text-zinc-500">{info.running ? info.url : t('local.where', { dir: info.dataDir })}</div>
+          <div className="truncate text-xs text-fg-subtle">{info.running ? info.url : t('local.where', { dir: info.dataDir })}</div>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {info.running && (
@@ -130,12 +130,12 @@ export function LocalServerPanel() {
       {info.installed && (
         <div className="grid gap-3 md:grid-cols-2">
           {info.admin && (
-            <div className="rounded-xl border border-zinc-800 p-4 text-sm">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">{t('local.admin')}</div>
+            <div className="rounded-lg border border-line p-4 text-sm">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-fg-subtle">{t('local.admin')}</div>
               {[info.admin.email, info.admin.password].map((value, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <span className="w-16 shrink-0 text-zinc-500">{t(i === 0 ? 'local.login' : 'local.password')}</span>
-                  <code className="min-w-0 flex-1 truncate font-mono text-zinc-200">{value}</code>
+                  <span className="w-16 shrink-0 text-fg-subtle">{t(i === 0 ? 'local.login' : 'local.password')}</span>
+                  <code className="min-w-0 flex-1 truncate font-mono text-fg">{value}</code>
                   <Button size="icon" variant="ghost" aria-label={t('common.copy')} onClick={() => void copy(value)}>
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
@@ -143,16 +143,16 @@ export function LocalServerPanel() {
               ))}
             </div>
           )}
-          <div className="rounded-xl border border-zinc-800 p-4 text-sm">
+          <div className="rounded-lg border border-line p-4 text-sm">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-fg-subtle">
                 <Wifi className="h-3.5 w-3.5" /> {t('local.lan')}
               </span>
               <Switch checked={info.lan} label={t('local.lan')} onChange={(v) => void run('lan', () => api.setLan(v))} />
             </div>
-            <p className="text-xs text-zinc-500">{t('local.lanHint')}</p>
+            <p className="text-xs text-fg-subtle">{t('local.lanHint')}</p>
             {info.lanUrls.map((u) => (
-              <button key={u} type="button" onClick={() => void copy(u)} className="mt-1 block font-mono text-xs text-violet-300 hover:text-violet-200">{u}</button>
+              <button key={u} type="button" onClick={() => void copy(u)} className="mt-1 block font-mono text-xs text-accent-text hover:underline">{u}</button>
             ))}
           </div>
         </div>
@@ -160,23 +160,23 @@ export function LocalServerPanel() {
 
       {/* Изменения */}
       <div className="space-y-3">
-        <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <div className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
           {t(info.installed ? 'local.changes' : 'local.firstInstall')}
         </div>
         {!bundle ? (
-          <Loader2 className="h-5 w-5 animate-spin text-violet-400" />
+          <Loader2 className="h-5 w-5 animate-spin text-accent" />
         ) : (
           <>
             {bundle.kind === 'install' ? (
-              <p className="text-sm text-zinc-400">{t('local.installHint')}</p>
+              <p className="text-sm text-fg-muted">{t('local.installHint')}</p>
             ) : upToDate ? (
-              <p className="text-sm text-zinc-400">{t('local.upToDate')}</p>
+              <p className="text-sm text-fg-muted">{t('local.upToDate')}</p>
             ) : (
               <ChangesList bundle={bundle} />
             )}
             {hasDanger && (
-              <label className="flex cursor-pointer items-start gap-2 text-sm text-rose-200">
-                <input type="checkbox" checked={acceptDanger} onChange={(e) => setAcceptDanger(e.target.checked)} className="mt-1 accent-rose-500" />
+              <label className="flex cursor-pointer items-start gap-2 text-sm text-danger">
+                <input type="checkbox" checked={acceptDanger} onChange={(e) => setAcceptDanger(e.target.checked)} className="mt-1 accent-[rgb(var(--c-danger))]" />
                 {t('local.acceptDanger')}
               </label>
             )}
@@ -197,11 +197,11 @@ export function LocalServerPanel() {
             </Button>
           )}
         </div>
-        {!validation.ok && <p className="text-sm text-rose-300">{t('export.fixSchema')}: {validation.errors.slice(0, 2).join('; ')}</p>}
+        {!validation.ok && <p className="text-sm text-danger">{t('export.fixSchema')}: {validation.errors.slice(0, 2).join('; ')}</p>}
       </div>
 
       {error && (
-        <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
+        <div className="rounded-lg border border-danger/30 bg-danger-soft p-3 text-xs text-danger">
           <div className="mb-1 flex items-center gap-1.5 font-semibold"><AlertTriangle className="h-3.5 w-3.5" /> {t('local.error')}</div>
           <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-mono">{error}</pre>
         </div>

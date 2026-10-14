@@ -2,7 +2,7 @@ import type { ClubEntity, ClubSchema, ViewType } from '@/types/schema';
 import { portalT } from './i18n';
 import { availableViews, relationsOf } from './model';
 import {
-  renderDashboard, renderDetail, renderEmpty, renderEntityPage, renderShell,
+  filterRecords, recordsToCsv, renderDashboard, renderDetail, renderEmpty, renderEntityPage, renderShell, sortRecords,
   type EntityUiState, type LoadState, type RenderCtx,
 } from './render';
 import type { DataSource, PortalAssets, Router } from './types';
@@ -14,6 +14,8 @@ export interface PortalOptions {
   assets?: PortalAssets;
   /** Вызывается при переходе в раздел (превью синхронизирует активную сущность редактора). */
   onEntityChange?: (entityId: string | null) => void;
+  /** После каждой отрисовки — для скриптов плагинов (window.FacetPortal.onRender). */
+  onRender?: (info: { path: string; entityId: string | null; recordId: string | null; root: HTMLElement }) => void;
   now?: () => Date;
 }
 
@@ -116,6 +118,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
     const keepSearch = focused && root.contains(focused) && focused.matches('[data-search]');
     const caret = keepSearch ? focused!.selectionStart : null;
     root.innerHTML = renderShell(c, active, body);
+    options.onRender?.({ path: options.router.get(), entityId: route.entity?.id ?? null, recordId: route.recordId, root });
     if (keepSearch) {
       const input = root.querySelector<HTMLInputElement>('[data-search]');
       if (input) {
@@ -165,6 +168,26 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
         state.month = { y: d.getFullYear(), m: d.getMonth() };
       }
       render();
+      return;
+    }
+    if (target.closest('[data-print]')) {
+      window.print();
+      return;
+    }
+    if (target.closest('[data-csv]') && entity) {
+      const state = data.get(entity.id);
+      if (state?.status !== 'ok') return;
+      const c = ctx();
+      const ui = uiOf(entity);
+      const rows = sortRecords(entity, filterRecords(c, entity, state.records, ui.query), ui.sort);
+      const blob = new Blob([recordsToCsv(c, entity, rows)], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${entity.id}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
       return;
     }
     if (target.closest('[data-refresh]')) {

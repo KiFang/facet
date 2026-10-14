@@ -3,6 +3,8 @@
  * Этот файл — единственный источник правды для редактора, превью и экспортёра.
  */
 
+import type { InstalledPlugin } from '@/plugins/types';
+
 export type ShadowIntensity = 'none' | 'soft' | 'medium' | 'colored';
 export type DividerStyle = 'solid' | 'dashed' | 'gradient' | 'minimal';
 export type Density = 'compact' | 'comfortable' | 'spacious';
@@ -109,6 +111,8 @@ export interface ClubSchema {
   locale?: Locale;
   /** Главная страница-дашборд. */
   dashboard?: DashboardConfig;
+  /** Подключённые плагины (без секретов — они только в .env сервера). */
+  plugins?: InstalledPlugin[];
 }
 
 export const DEFAULT_DASHBOARD: DashboardConfig = { enabled: true, widgets: ['stats', 'upcoming', 'statuses', 'recent'] };

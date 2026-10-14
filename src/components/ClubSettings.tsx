@@ -86,15 +86,16 @@ export function TemplateGallery() {
       <button
         key={tpl.id}
         type="button"
+        data-template={tpl.id}
         onClick={() => pick(tpl)}
-        className="group flex flex-col items-start gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3 text-left transition-colors hover:border-violet-500/60 hover:bg-violet-500/5"
+        className="group flex flex-col items-start gap-2 rounded-lg border border-line bg-sunken p-3 text-left transition-colors hover:border-accent hover:bg-accent-soft"
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300 transition-colors group-hover:bg-violet-600 group-hover:text-white">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-hover text-fg transition-colors group-hover:bg-accent group-hover:text-accent-fg">
           <Icon className="h-4 w-4" />
         </span>
         <span>
-          <span className="block text-sm font-semibold text-zinc-100">{tpl.meta.title}</span>
-          <span className="block text-xs leading-snug text-zinc-500">{tpl.meta.description}</span>
+          <span className="block text-sm font-semibold text-fg">{tpl.meta.title}</span>
+          <span className="block text-xs leading-snug text-fg-subtle">{tpl.meta.description}</span>
         </span>
       </button>
     );
@@ -120,7 +121,7 @@ export function TemplateGallery() {
       <div className="grid grid-cols-2 gap-2">{builtIn.map(card)}</div>
       {community.length > 0 && (
         <>
-          <p className="flex items-center gap-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="flex items-center gap-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
             <Users className="h-3 w-3" /> {t('templates.community')}
           </p>
           <div className="grid grid-cols-2 gap-2">{community.map(card)}</div>
@@ -160,16 +161,16 @@ export function DashboardSettings() {
       icon={<LayoutDashboard className="h-3.5 w-3.5" />}
       action={<Switch checked={dashboard.enabled} label={t('dashboard.enabled')} onChange={(enabled) => setDashboard({ ...dashboard, enabled })} />}
     >
-      <p className="text-xs text-zinc-500">{t('dashboard.hint')}</p>
+      <p className="text-xs text-fg-subtle">{t('dashboard.hint')}</p>
       {dashboard.enabled && (
         <div className="space-y-1.5">
           {order.map((id) => {
             const on = dashboard.widgets.includes(id);
             const idx = dashboard.widgets.indexOf(id);
             return (
-              <div key={id} className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-1.5">
+              <div key={id} className="flex items-center gap-2 rounded-lg border border-line bg-sunken px-3 py-1.5">
                 <Switch checked={on} label={t(WIDGETS.find((w) => w.id === id)!.label)} onChange={(v) => toggle(id, v)} />
-                <span className={on ? 'flex-1 text-sm text-zinc-200' : 'flex-1 text-sm text-zinc-500'}>{t(WIDGETS.find((w) => w.id === id)!.label)}</span>
+                <span className={on ? 'flex-1 text-sm text-fg' : 'flex-1 text-sm text-fg-subtle'}>{t(WIDGETS.find((w) => w.id === id)!.label)}</span>
                 <Button size="icon" variant="ghost" aria-label={t('common.up')} disabled={!on || idx === 0} onClick={() => move(id, -1)}>
                   <ArrowUp className="h-3.5 w-3.5" />
                 </Button>

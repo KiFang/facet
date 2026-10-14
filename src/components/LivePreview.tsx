@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSettings, type PreviewViewport } from '@/store/useSettings';
+import { pluginCss } from '@/plugins/runtime';
 import { Lock, Monitor, Smartphone, Tablet } from 'lucide-react';
 import { useClubStore } from '@/store/useClubStore';
 import { cssVarsToText, dividerCss, fontStylesheetUrl, themeToCssVars } from '@/utils/theme';
@@ -9,7 +11,7 @@ import { slugify } from '@/lib/id';
 import { useT } from '@/i18n';
 import { Segmented } from './ui/Segmented';
 
-type Viewport = 'desktop' | 'tablet' | 'mobile';
+type Viewport = PreviewViewport;
 const VIEWPORT_WIDTH: Record<Viewport, string> = { desktop: '100%', tablet: '768px', mobile: '390px' };
 
 /** Подключает шрифт темы (Google Fonts) в редакторе, чтобы превью выглядело как портал. */
@@ -33,7 +35,9 @@ export function LivePreview() {
   const schema = useClubStore((s) => s.schema);
   const seeds = useClubStore((s) => s.seeds);
   const activeEntityId = useClubStore((s) => s.activeEntityId);
-  const [viewport, setViewport] = useState<Viewport>('desktop');
+  const viewport = useSettings((s) => s.viewport);
+  const setViewport = (v: Viewport) => useSettings.getState().set({ viewport: v });
+  const plugins = useClubStore((s) => s.schema.plugins);
   const hostRef = useRef<HTMLDivElement>(null);
   const portalRef = useRef<PortalHandle | null>(null);
   const routerRef = useRef(memoryRouter(activeEntityId ? `/${activeEntityId}` : '/'));
@@ -44,8 +48,8 @@ export function LivePreview() {
   useFontStylesheet(fontStylesheetUrl(schema.theme.font));
 
   const css = useMemo(
-    () => `${cssVarsToText(themeToCssVars(schema.theme), '.fx-preview-scope')}\n.fx-preview-scope ${dividerCss(schema.theme)}\n${portalCss}`,
-    [schema.theme],
+    () => `${cssVarsToText(themeToCssVars(schema.theme), '.fx-preview-scope')}\n.fx-preview-scope ${dividerCss(schema.theme)}\n${portalCss}\n${pluginCss(schema)}`,
+    [schema.theme, plugins], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   useEffect(() => {
@@ -85,14 +89,14 @@ export function LivePreview() {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
-      <div className="flex items-center justify-between gap-3 px-5 py-3">
-        <div className="flex items-center gap-2 text-sm text-zinc-400">
+      <div className="flex h-9 shrink-0 items-center justify-between gap-3 border-b border-line bg-panel px-3">
+        <div className="flex items-center gap-2 text-xs text-fg-muted">
           <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
           </span>
           {t('preview.title')}
-          {Object.keys(seeds).length > 0 && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-300">{t('preview.realData')}</span>}
+          {Object.keys(seeds).length > 0 && <span className="rounded-full bg-success-soft px-2 py-0.5 text-2xs text-success">{t('preview.realData')}</span>}
         </div>
         <Segmented
           size="sm"
@@ -108,19 +112,19 @@ export function LivePreview() {
         />
       </div>
 
-      <div className="min-h-0 min-w-0 flex-1 overflow-auto px-5 pb-5">
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto p-4">
         <div
-          className="mx-auto flex h-full min-h-[560px] w-full min-w-0 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl shadow-black/40 transition-[max-width] duration-300"
+          className="mx-auto flex h-full min-h-[560px] w-full min-w-0 flex-col overflow-hidden rounded-md border border-line-strong bg-sunken shadow-panel transition-[max-width] duration-300"
           style={{ maxWidth: VIEWPORT_WIDTH[viewport] }}
         >
-          <div className="flex items-center gap-3 border-b border-zinc-800 px-3 py-2">
+          <div className="flex items-center gap-3 border-b border-line bg-panel px-3 py-1.5">
             <div className="flex gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-rose-400/80" />
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+              <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+              <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+              <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md bg-zinc-950 px-3 py-1 text-xs text-zinc-400">
-              <Lock className="h-3 w-3 shrink-0 text-emerald-400" />
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded border border-line bg-sunken px-2.5 py-0.5 text-2xs text-fg-muted">
+              <Lock className="h-3 w-3 shrink-0 text-success" />
               <span className="truncate">https://{host}/#{path}</span>
             </div>
           </div>

@@ -27,6 +27,46 @@ protocol.registerSchemesAsPrivileged([
 let server = null;
 let win = null;
 
+const isOwnUrl = (url) => url.startsWith('app://facet/') || (!!process.env.FACET_DEV_URL && url.startsWith(process.env.FACET_DEV_URL));
+
+/**
+ * Окна справки и редактора данных (index.html?window=…) открываются как дочерние окна
+ * с тем же preload; все остальные ссылки — в системном браузере.
+ */
+function guardContents(contents) {
+  contents.setWindowOpenHandler(({ url }) => {
+    if (isOwnUrl(url) && /[?&]window=(help|data)\b/.test(url)) {
+      const help = /[?&]window=help\b/.test(url);
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: help ? 1120 : 1360,
+          height: help ? 820 : 860,
+          minWidth: 720,
+          minHeight: 480,
+          autoHideMenuBar: true,
+          backgroundColor: '#f0f1f4',
+          icon: path.join(__dirname, 'build', 'icon.png'),
+          webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true },
+        },
+      };
+    }
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  contents.on('will-navigate', (event, url) => {
+    if (!isOwnUrl(url)) {
+      event.preventDefault();
+      if (/^https?:\/\//.test(url)) void shell.openExternal(url);
+    }
+  });
+}
+
+app.on('web-contents-created', (_e, contents) => {
+  // Дочерние окна получают те же правила навигации.
+  contents.on('did-create-window', (child) => guardContents(child.webContents));
+});
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1440,
@@ -34,7 +74,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 640,
     title: 'Facet OS',
-    backgroundColor: '#09090b',
+    backgroundColor: '#f0f1f4',
     autoHideMenuBar: true,
     icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: {
@@ -45,16 +85,7 @@ function createWindow() {
   });
 
   // Внешние ссылки (Google Fonts docs, PocketBase, портал) — в системном браузере.
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//.test(url)) void shell.openExternal(url);
-    return { action: 'deny' };
-  });
-  win.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('app://') && !url.startsWith(process.env.FACET_DEV_URL || '\0')) {
-      event.preventDefault();
-      if (/^https?:\/\//.test(url)) void shell.openExternal(url);
-    }
-  });
+  guardContents(win.webContents);
 
   void win.loadURL(process.env.FACET_DEV_URL || 'app://facet/index.html');
 }

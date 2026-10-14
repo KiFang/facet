@@ -59,3 +59,17 @@ export function fileNames(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
   return typeof value === 'string' && value ? [value] : [];
 }
+
+/** Возможности портала, включённые плагинами (без импорта каталога — portal.js должен оставаться лёгким). */
+export function portalFeatureSet(schema: ClubSchema): Set<'csv' | 'print'> {
+  const out = new Set<'csv' | 'print'>();
+  for (const p of schema.plugins ?? []) {
+    if (!p.enabled) continue;
+    if (p.id === 'portal-tools') {
+      out.add('csv');
+      out.add('print');
+    }
+    for (const f of p.manifest?.contributes?.portalFeatures ?? []) out.add(f);
+  }
+  return out;
+}

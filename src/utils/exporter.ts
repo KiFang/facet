@@ -22,8 +22,10 @@ import { planMigration, renderMigrationFile } from '@/utils/migrations/generate'
 import { buildSeedOp, orderSeedOps } from '@/utils/migrations/seeds';
 import { describeChange, SEVERITY_MARK } from '@/utils/migrations/describe';
 import type { SchemaDiff } from '@/utils/migrations/diff';
+import { pluginCss, pluginEnvLines, pluginFiles, pluginScripts } from '@/plugins/runtime';
 
-export const FACET_VERSION = '0.2.0';
+export { FACET_VERSION } from '@/version';
+import { FACET_VERSION } from '@/version';
 export const PB_VERSION = '0.25.9';
 
 export interface ExportFile {
@@ -50,6 +52,8 @@ export interface ExportOptions {
   now?: Date;
   /** Пароль администратора (по умолчанию — случайный). */
   password?: string;
+  /** Секреты плагинов: попадают только в .env (установка) и env.defaults (обновление). */
+  secrets?: Record<string, Record<string, string>>;
 }
 
 /* ---------------------------------- helpers --------------------------------- */
@@ -197,7 +201,12 @@ BACKUP_S3_ACCESS_KEY=
 BACKUP_S3_SECRET=
 `;
 
-export function generateEnv(schema: ClubSchema, password = randomPassword()): string {
+function pluginEnvBlock(schema: ClubSchema, secrets: ExportOptions['secrets'] = {}, includeEmpty = true): string {
+  const lines = pluginEnvLines(schema, secrets, { includeEmpty });
+  return lines.length ? `\n# Секреты плагинов (токены). Меняются здесь или повторным экспортом обновления.\n${lines.join('\n')}\n` : '';
+}
+
+export function generateEnv(schema: ClubSchema, password = randomPassword(), secrets: ExportOptions['secrets'] = {}): string {
   return `# Секреты портала «${schema.clubName}». Не публикуйте этот файл.
 PB_ADMIN_EMAIL=admin@${projectSlug(schema)}.club
 PB_ADMIN_PASSWORD=${password}
@@ -205,7 +214,7 @@ PB_ADMIN_PASSWORD=${password}
 # Имя Docker-проекта = имя тома с базой. Не меняйте после установки — иначе Docker создаст новую пустую базу.
 COMPOSE_PROJECT_NAME=${projectSlug(schema)}
 
-${ENV_DEFAULTS}`;
+${ENV_DEFAULTS}${pluginEnvBlock(schema, secrets)}`;
 }
 
 /* -------------------------------------- web ---------------------------------- */
@@ -218,7 +227,7 @@ html, body { margin: 0; min-height: 100%; background: var(--fx-bg); }
 
 ${dividerCss(schema.theme)}
 
-${portalBaseCss}`;
+${portalBaseCss}${pluginCss(schema) ? `\n\n/* ---------- plugins ---------- */\n${pluginCss(schema)}\n` : ''}`;
 }
 
 export function generatePortalHtml(schema: ClubSchema): string {
@@ -238,7 +247,7 @@ ${logo ? `    <link rel="icon" href="/${logo.path}" />\n` : ''}${font ? `    <li
   <body>
     <div id="app"${logo ? ` data-logo="/${logo.path}"` : ''}><div class="fx-root"><div class="fx-shell"><div class="fx-empty">…</div></div></div></div>
     <script src="/portal.js" defer></script>
-  </body>
+${pluginScripts(schema).map((src) => `    <script src="${src}" defer></script>\n`).join('')}  </body>
 </html>
 `;
 }
@@ -429,6 +438,7 @@ function sharedFiles(schema: ClubSchema): ExportFile[] {
   ];
   const logo = logoFile(schema);
   if (logo) files.push({ path: `web/${logo.path}`, content: logo.base64, encoding: 'base64', description: 'Логотип клуба' });
+  files.push(...pluginFiles(schema));
   return files;
 }
 
@@ -458,7 +468,7 @@ export async function buildInstallBundle(
   const initName = `${ts}_facet_init.js`;
   const files = sharedFiles(schema);
   files.push(
-    { path: '.env', content: generateEnv(schema, options.password), description: 'Логин и случайный пароль администратора, настройки' },
+    { path: '.env', content: generateEnv(schema, options.password, options.secrets), description: 'Логин и случайный пароль администратора, настройки' },
     {
       path: `pocketbase/pb_migrations/${initName}`,
       content: renderMigrationFile({ title: `структура клуба «${schema.clubName}»`, ops: [...diff.ops, ...seed.ops] }),
@@ -512,7 +522,7 @@ export async function buildUpdateBundle(
     { path: 'UPDATE.md', content: generateUpdateMd(schema, diff, seed.rows, baseHash), description: 'Что изменится и как применить' },
     { path: 'apply-update.sh', content: applyUpdateSh, description: 'Проверка версии, бэкап, применение', executable: true },
     { path: 'CHANGES.txt', content: `${changesTxt.length ? changesTxt.join('\n') : '  Структура базы не меняется.'}\n`, description: 'Список изменений' },
-    { path: 'env.defaults', content: ENV_DEFAULTS, description: 'Новые настройки для .env' },
+    { path: 'env.defaults', content: `${ENV_DEFAULTS}${pluginEnvBlock(schema, options.secrets, false)}`, description: 'Новые настройки для .env (секреты плагинов обновляются)' },
     { path: '.facet/base-schema.sha256', content: `${baseHash}\n`, description: 'Контрольная сумма версии на сервере' },
     ...payload,
   ];

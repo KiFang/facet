@@ -43,8 +43,8 @@ export function SchemaEditor() {
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-2 font-mono text-xs text-zinc-400">
-          <FileJson className="h-3.5 w-3.5 text-violet-400" /> club-schema.json
+        <span className="flex items-center gap-2 font-mono text-xs text-fg-muted">
+          <FileJson className="h-3.5 w-3.5 text-accent" /> club-schema.json
         </span>
         <div className="flex gap-1">
           <input ref={fileRef} type="file" accept="application/json,.json" className="hidden"
@@ -77,13 +77,13 @@ export function SchemaEditor() {
         className="min-h-[420px] flex-1 resize-none font-mono text-[12px] leading-relaxed"
       />
       {errors.length > 0 ? (
-        <div className="max-h-40 overflow-auto rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
+        <div className="max-h-40 overflow-auto rounded-lg border border-danger/30 bg-danger-soft p-3 text-xs text-danger">
           <div className="mb-1 flex items-center gap-1.5 font-semibold"><XCircle className="h-3.5 w-3.5" /> {t('json.notApplied')}</div>
           <ul className="list-disc space-y-0.5 pl-5 font-mono">{errors.map((err) => <li key={err}>{err}</li>)}</ul>
         </div>
       ) : (
-        <p className="flex items-center gap-1.5 text-xs text-zinc-500">
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+        <p className="flex items-center gap-1.5 text-xs text-fg-subtle">
+          <CheckCircle2 className="h-3.5 w-3.5 text-success" />
           {dirty ? t('json.dirty') : t('json.synced')}
         </p>
       )}

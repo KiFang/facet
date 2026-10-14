@@ -5,7 +5,7 @@ import type { PortalT } from './i18n';
 import { recordsLabel } from './i18n';
 import {
   availableViews, dateFieldOf, expandedList, fileNames, groupFieldOf, isImage, parsePbDate,
-  recordTitle, relationsOf, statusFieldOf, titleFieldOf,
+  portalFeatureSet, recordTitle, relationsOf, statusFieldOf, titleFieldOf,
 } from './model';
 import type { DataSource, PortalAssets, PortalRecord } from './types';
 
@@ -88,7 +88,7 @@ export function fieldValue(ctx: RenderCtx, entity: ClubEntity, field: EntityFiel
   switch (field.type) {
     case 'date': {
       const d = parsePbDate(value);
-      return d ? esc(formatDate(ctx.locale, d)) : esc(value);
+      return d ? `<time data-date="${d.toISOString()}">${esc(formatDate(ctx.locale, d))}</time>` : esc(value);
     }
     case 'number':
       return esc(Number(value).toLocaleString(ctx.locale));
@@ -186,9 +186,14 @@ export function renderEntityPage(ctx: RenderCtx, entity: ClubEntity, ui: EntityU
         .map((v) => `<button type="button" role="tab" class="fx-view-btn" data-view="${v}" aria-selected="${v === ui.view}" title="${esc(t(`view.${v}`))}">${icon(VIEW_ICONS[v], 15)}<span>${esc(t(`view.${v}`))}</span></button>`)
         .join('')}</div>`
     : '';
+  const features = portalFeatureSet(ctx.schema);
+  const tools = [
+    features.has('csv') ? `<button type="button" class="fx-btn fx-btn-ghost" data-csv title="${esc(t('csvTitle'))}">${icon('FileText', 15)}${esc(t('csv'))}</button>` : '',
+    features.has('print') ? `<button type="button" class="fx-btn fx-btn-ghost" data-print>${icon('Ticket', 15)}${esc(t('print'))}</button>` : '',
+  ].join('');
   const head = `<div class="fx-toolbar">
   <h2>${icon(entity.icon, 20)}${esc(entity.pluralName)}</h2>
-  <div class="fx-toolbar-actions">${switcher}<label class="fx-search-wrap">${icon('Search', 15)}<input class="fx-search" type="search" data-search placeholder="${esc(t('search'))}" value="${esc(ui.query)}" aria-label="${esc(t('search'))}"></label></div>
+  <div class="fx-toolbar-actions">${tools}${switcher}<label class="fx-search-wrap">${icon('Search', 15)}<input class="fx-search" type="search" data-search placeholder="${esc(t('search'))}" value="${esc(ui.query)}" aria-label="${esc(t('search'))}"></label></div>
 </div><hr class="fx-divider">`;
 
   const loading = renderLoadState(ctx, ctx.data(entity.id));
@@ -454,6 +459,8 @@ export function renderDetail(ctx: RenderCtx, entity: ClubEntity, recordId: strin
   <header class="fx-detail-head">
     <div><h2>${esc(recordTitle(entity, record, t('untitled')))}</h2>${meta ? `<p class="fx-muted">${esc(meta)}</p>` : ''}</div>
     <div class="fx-detail-actions">${status && record[status.id] ? badge(status, String(record[status.id])) : ''}${
+      portalFeatureSet(ctx.schema).has('print') ? `<button type="button" class="fx-btn fx-btn-ghost" data-print>${icon('Ticket', 15)}${esc(t('print'))}</button>` : ''
+    }${
       editUrl ? `<a class="fx-btn" href="${esc(editUrl)}" target="_blank" rel="noopener">${icon('Pencil', 15)}${esc(t('edit'))}</a>` : ''
     }</div>
   </header>
@@ -538,4 +545,37 @@ export function renderDashboard(ctx: RenderCtx): string {
   }
   if (!schema.entities.length) return renderEmpty(t('noEntities'), t('noEntitiesHint'));
   return `<div class="fx-dashboard">${parts.join('')}</div>`;
+}
+
+/* ----------------------------------- CSV ----------------------------------- */
+
+function plainValue(ctx: RenderCtx, field: EntityField, record: PortalRecord): string {
+  const value = record[field.id];
+  if (field.type === 'relation') {
+    const target = ctx.schema.entities.find((e) => e.id === field.targetEntityId);
+    return expandedList(record, field.id).map((x) => recordTitle(target, x, '')).join('; ');
+  }
+  if (value === undefined || value === null) return '';
+  if (field.type === 'date') {
+    const d = parsePbDate(value);
+    return d ? d.toLocaleString(ctx.locale, { dateStyle: 'short', timeStyle: 'short' }) : '';
+  }
+  if (Array.isArray(value)) return value.join('; ');
+  return String(value);
+}
+
+/** CSV для Excel: BOM, разделитель «;» для русской локали. */
+export function recordsToCsv(ctx: RenderCtx, entity: ClubEntity, records: PortalRecord[]): string {
+  const sep = ctx.locale === 'ru' ? ';' : ',';
+  const extra = relationsOf(ctx.schema, entity).filter((r) => !entity.fields.some((f) => f.id === r.name));
+  const cell = (v: string) => (/[";\n,]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const header = [...entity.fields.map((f) => f.name), ...extra.map((r) => r.label)];
+  const rows = records.map((r) => [
+    ...entity.fields.map((f) => plainValue(ctx, f, r)),
+    ...extra.map((rel) => {
+      const target = ctx.schema.entities.find((e) => e.id === rel.targetEntityId);
+      return expandedList(r, rel.name).map((x) => recordTitle(target, x, '')).join('; ');
+    }),
+  ]);
+  return `\uFEFF${[header, ...rows].map((row) => row.map((v) => cell(v)).join(sep)).join('\r\n')}\r\n`;
 }

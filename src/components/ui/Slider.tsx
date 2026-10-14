@@ -14,7 +14,7 @@ interface SliderProps {
 export function Slider({ label, value, min, max, step = 1, unit = 'px', onChange }: SliderProps) {
   return (
     <div>
-      <Label hint={`${value}${unit}`}>{label}</Label>
+      <Label hint={<span className="font-mono">{value}{unit}</span>}>{label}</Label>
       <RadixSlider.Root
         className="relative flex h-5 w-full touch-none select-none items-center"
         value={[value]}
@@ -24,10 +24,10 @@ export function Slider({ label, value, min, max, step = 1, unit = 'px', onChange
         onValueChange={([v]) => onChange(v)}
         aria-label={label}
       >
-        <RadixSlider.Track className="relative h-1.5 grow overflow-hidden rounded-full bg-zinc-800">
-          <RadixSlider.Range className="absolute h-full rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500" />
+        <RadixSlider.Track className="relative h-1 grow overflow-hidden rounded-full bg-line">
+          <RadixSlider.Range className="absolute h-full rounded-full bg-accent" />
         </RadixSlider.Track>
-        <RadixSlider.Thumb className="block h-4 w-4 rounded-full border-2 border-violet-400 bg-zinc-950 shadow transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-violet-500/30" />
+        <RadixSlider.Thumb className="block h-4 w-4 rounded-full border-2 border-accent bg-panel shadow-panel transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/25" />
       </RadixSlider.Root>
     </div>
   );

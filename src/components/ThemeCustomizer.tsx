@@ -67,8 +67,8 @@ export function LogoPicker() {
   const ref = useRef<HTMLInputElement>(null);
   return (
     <div className="flex items-center gap-3">
-      <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl border border-dashed border-zinc-700 bg-zinc-900">
-        {logo ? <img src={logo} alt="" className="h-full w-full object-contain p-1" /> : <ImagePlus className="h-5 w-5 text-zinc-600" />}
+      <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-dashed border-line-strong bg-sunken">
+        {logo ? <img src={logo} alt="" className="h-full w-full object-contain p-1" /> : <ImagePlus className="h-5 w-5 text-fg-subtle" />}
       </div>
       <div className="flex flex-1 flex-col gap-1.5">
         <input
@@ -98,7 +98,7 @@ export function LogoPicker() {
             </Button>
           )}
         </div>
-        <span className="text-[11px] text-zinc-500">{t('logo.hint')}</span>
+        <span className="text-[11px] text-fg-subtle">{t('logo.hint')}</span>
       </div>
     </div>
   );
@@ -121,11 +121,11 @@ export function FontPicker() {
           onClick={() => setThemeToken('font', id)}
           className={cn(
             'rounded-lg border px-2 py-2 text-left transition-colors',
-            font === id ? 'border-violet-500 bg-violet-500/10 text-white' : 'border-zinc-800 text-zinc-300 hover:border-zinc-600',
+            font === id ? 'border-accent bg-accent-soft text-fg' : 'border-line text-fg hover:border-fg-subtle',
           )}
         >
           <span className="block text-lg leading-none" style={{ fontFamily: FONTS[id].stack }}>Аа Bb</span>
-          <span className="mt-1 block truncate text-[11px] text-zinc-400">{id === 'system' ? t('font.system') : FONTS[id].label}</span>
+          <span className="mt-1 block truncate text-[11px] text-fg-muted">{id === 'system' ? t('font.system') : FONTS[id].label}</span>
         </button>
       ))}
     </div>
@@ -143,7 +143,7 @@ function ColorField({ name, value, onChange }: { name: keyof ThemeColors; value:
   return (
     <div className="flex items-center gap-2.5">
       <label
-        className="relative h-9 w-9 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-zinc-700 shadow-inner"
+        className="relative h-9 w-9 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-line-strong shadow-inner"
         style={{ background: value }}
         title={label}
       >
@@ -156,7 +156,7 @@ function ColorField({ name, value, onChange }: { name: keyof ThemeColors; value:
         />
       </label>
       <div className="min-w-0 flex-1">
-        <label htmlFor={id} className="block text-xs font-medium text-zinc-400">{label}</label>
+        <label htmlFor={id} className="block text-xs font-medium text-fg-muted">{label}</label>
         <input
           id={id}
           value={draft}
@@ -166,7 +166,7 @@ function ColorField({ name, value, onChange }: { name: keyof ThemeColors; value:
             if (HEX.test(e.target.value)) onChange(e.target.value.toLowerCase());
           }}
           onBlur={() => setDraft(value)}
-          className={cn('w-full bg-transparent font-mono text-sm uppercase text-zinc-100 focus:outline-none', !HEX.test(draft) && 'text-rose-400')}
+          className={cn('w-full bg-transparent font-mono text-sm uppercase text-fg focus:outline-none', !HEX.test(draft) && 'text-danger')}
         />
       </div>
     </div>
@@ -185,14 +185,14 @@ function PaletteGrid({ current, onPick }: { current: ThemeColors; onPick: (c: Th
             key={p.id}
             type="button"
             onClick={() => onPick(p.colors)}
-            className={cn('group rounded-xl border p-1.5 text-left transition-colors', active ? 'border-violet-500 bg-violet-500/10' : 'border-zinc-800 hover:border-zinc-600')}
+            className={cn('group rounded-lg border p-1.5 text-left transition-colors', active ? 'border-accent bg-accent-soft' : 'border-line hover:border-fg-subtle')}
             title={name}
           >
             <div className="flex h-9 overflow-hidden rounded-lg" style={{ background: p.colors.background }}>
               <div className="m-1.5 flex-1 rounded" style={{ background: p.colors.primary }} />
               <div className="my-1.5 mr-1.5 w-2.5 rounded" style={{ background: p.colors.accent }} />
             </div>
-            <div className="mt-1 truncate px-0.5 text-[11px] text-zinc-400 group-hover:text-zinc-200">{name}</div>
+            <div className="mt-1 truncate px-0.5 text-[11px] text-fg-muted group-hover:text-fg">{name}</div>
           </button>
         );
       })}
@@ -208,7 +208,7 @@ function ContrastWarnings({ colors }: { colors: ThemeColors }) {
   ].filter((c) => c.ratio < 4.5);
   if (!checks.length) return null;
   return (
-    <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+    <div className="flex gap-2 rounded-lg border border-warning/30 bg-warning-soft p-2.5 text-xs text-warning">
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <div>{t('contrast.low')}: {checks.map((c) => `${c.label} — ${c.ratio.toFixed(1)}`).join('; ')}</div>
     </div>
@@ -227,8 +227,8 @@ function ShadowPicker({ theme, onChange }: { theme: ThemeTokens; onChange: (v: S
           type="button"
           onClick={() => onChange(value)}
           className={cn(
-            'flex flex-col items-center gap-2 rounded-xl border px-1 pb-2 pt-3 text-[11px] transition-colors',
-            theme.shadowIntensity === value ? 'border-violet-500 bg-violet-500/10 text-white' : 'border-zinc-800 text-zinc-400 hover:border-zinc-600',
+            'flex flex-col items-center gap-2 rounded-lg border px-1 pb-2 pt-3 text-[11px] transition-colors',
+            theme.shadowIntensity === value ? 'border-accent bg-accent-soft text-fg' : 'border-line text-fg-muted hover:border-fg-subtle',
           )}
         >
           <span className="h-7 w-10 rounded-md bg-white" style={{ boxShadow: shadowValue({ ...theme, shadowIntensity: value }) }} />
@@ -244,9 +244,9 @@ function DividerPicker({ value, primary, accent, onChange }: { value: DividerSty
   const sample = (style: DividerStyle) => {
     switch (style) {
       case 'solid':
-        return <span className="block h-0 w-full border-t border-zinc-400" />;
+        return <span className="block h-0 w-full border-t border-fg-subtle" />;
       case 'dashed':
-        return <span className="block h-0 w-full border-t border-dashed border-zinc-400" />;
+        return <span className="block h-0 w-full border-t border-dashed border-fg-subtle" />;
       case 'gradient':
         return <span className="block h-0.5 w-full" style={{ background: `linear-gradient(90deg, transparent, ${primary}, ${accent}, transparent)` }} />;
       case 'minimal':
@@ -261,8 +261,8 @@ function DividerPicker({ value, primary, accent, onChange }: { value: DividerSty
           type="button"
           onClick={() => onChange(d)}
           className={cn(
-            'flex flex-col items-center gap-2.5 rounded-xl border px-2 pb-2 pt-4 text-[11px] transition-colors',
-            value === d ? 'border-violet-500 bg-violet-500/10 text-white' : 'border-zinc-800 text-zinc-400 hover:border-zinc-600',
+            'flex flex-col items-center gap-2.5 rounded-lg border px-2 pb-2 pt-4 text-[11px] transition-colors',
+            value === d ? 'border-accent bg-accent-soft text-fg' : 'border-line text-fg-muted hover:border-fg-subtle',
           )}
         >
           <span className="flex h-2 w-full items-center justify-start">{sample(d)}</span>
@@ -320,7 +320,7 @@ export function ThemeCustomizer() {
     <Accordion type="multiple" defaultValue={['brand', 'shape', 'colors', 'effects']} className="px-1">
       <AccordionItem value="brand">
         <AccordionTrigger>
-          <span className="flex items-center gap-2"><Type className="h-4 w-4 text-violet-400" />{t('style.brand')}</span>
+          <span className="flex items-center gap-2"><Type className="h-4 w-4 text-accent" />{t('style.brand')}</span>
         </AccordionTrigger>
         <AccordionContent className="space-y-4">
           <LogoPicker />
@@ -333,7 +333,7 @@ export function ThemeCustomizer() {
 
       <AccordionItem value="shape">
         <AccordionTrigger>
-          <span className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4 text-violet-400" />{t('style.shape')}</span>
+          <span className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4 text-accent" />{t('style.shape')}</span>
         </AccordionTrigger>
         <AccordionContent className="space-y-5">
           <Slider label={t('style.radius')} value={theme.borderRadius} min={0} max={28} onChange={(v) => setThemeToken('borderRadius', v)} />
@@ -347,11 +347,11 @@ export function ThemeCustomizer() {
 
       <AccordionItem value="colors">
         <AccordionTrigger>
-          <span className="flex items-center gap-2"><Palette className="h-4 w-4 text-violet-400" />{t('style.colors')}</span>
+          <span className="flex items-center gap-2"><Palette className="h-4 w-4 text-accent" />{t('style.colors')}</span>
         </AccordionTrigger>
         <AccordionContent className="space-y-4">
           <PaletteGrid current={theme.colors} onPick={(c) => setThemeToken('colors', { ...c })} />
-          <div className="grid grid-cols-2 gap-x-3 gap-y-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-3 rounded-lg border border-line bg-sunken p-3">
             {COLOR_KEYS.map((key) => (
               <ColorField key={key} name={key} value={theme.colors[key]} onChange={(v) => setThemeColor(key, v)} />
             ))}
@@ -362,7 +362,7 @@ export function ThemeCustomizer() {
 
       <AccordionItem value="effects">
         <AccordionTrigger>
-          <span className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-violet-400" />{t('style.effects')}</span>
+          <span className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-accent" />{t('style.effects')}</span>
         </AccordionTrigger>
         <AccordionContent className="space-y-4">
           <div>

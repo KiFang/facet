@@ -179,3 +179,18 @@
   .fx-search-wrap { flex: 1 1 100%; }
   .fx-dashboard { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- печать (плагин «Печать и выгрузка») ---------- */
+@media print {
+  .fx-root { background: #fff !important; color: #000 !important; font-size: 11pt; }
+  .fx-nav, .fx-hero-actions, .fx-toolbar-actions, .fx-footer, .fx-back, .fx-detail-actions .fx-btn, .fx-views { display: none !important; }
+  .fx-shell { max-width: none; padding: 0; gap: 12px; }
+  .fx-hero { box-shadow: none; padding: 0 0 8px; background: none !important; color: #000 !important; border-bottom: 2px solid #000; border-radius: 0; }
+  .fx-hero::after { display: none; }
+  .fx-card, .fx-panel, .fx-table-wrap, .fx-cal-grid, .fx-stat { box-shadow: none !important; border-color: #999 !important; break-inside: avoid; }
+  .fx-card:hover { transform: none; }
+  .fx-table-wrap { overflow: visible; }
+  .fx-table th { position: static; background: #eee !important; color: #000 !important; }
+  .fx-table th, .fx-table td { white-space: normal; }
+  a { text-decoration: none; }
+}

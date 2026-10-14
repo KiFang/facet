@@ -151,10 +151,10 @@ export function ImportDialog({ entityId, onClose }: { entityId?: string; onClose
                     if (f) accept(await f.text(), f.name);
                   }} />
                 <button type="button" onClick={() => fileRef.current?.click()}
-                  className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-zinc-700 p-10 text-sm text-zinc-400 transition-colors hover:border-violet-500 hover:text-zinc-200">
-                  <FileSpreadsheet className="h-8 w-8 text-emerald-400" />
+                  className="flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed border-line-strong p-10 text-sm text-fg-muted transition-colors hover:border-accent hover:text-fg">
+                  <FileSpreadsheet className="h-8 w-8 text-success" />
                   {t('import.pickFile')}
-                  <span className="text-xs text-zinc-500">{t('import.fileHint')}</span>
+                  <span className="text-xs text-fg-subtle">{t('import.fileHint')}</span>
                 </button>
               </TabsContent>
               <TabsContent value="paste" className="space-y-2 pt-4">
@@ -166,7 +166,7 @@ export function ImportDialog({ entityId, onClose }: { entityId?: string; onClose
                   <Label htmlFor="sheet-url">{t('import.sheetUrl')}</Label>
                   <Input id="sheet-url" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" />
                 </div>
-                <p className="text-xs text-zinc-500">{t('import.sheetHint')}</p>
+                <p className="text-xs text-fg-subtle">{t('import.sheetHint')}</p>
                 <Button variant="primary" disabled={!sheetUrl.trim() || loading} onClick={() => void loadSheet()}>
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />} {t('import.load')}
                 </Button>
@@ -174,13 +174,13 @@ export function ImportDialog({ entityId, onClose }: { entityId?: string; onClose
             </Tabs>
           ) : entity ? (
             <>
-              <p className="text-sm text-zinc-400">{t('import.mapHint', { rows: table.rows.length, source })}</p>
-              <div className="overflow-auto rounded-xl border border-zinc-800">
+              <p className="text-sm text-fg-muted">{t('import.mapHint', { rows: table.rows.length, source })}</p>
+              <div className="overflow-auto rounded-lg border border-line">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-900">
+                  <thead className="bg-sunken">
                     <tr>
                       {table.headers.map((h, i) => (
-                        <th key={i} className="min-w-[150px] border-b border-zinc-800 p-2 align-top font-medium text-zinc-300">
+                        <th key={i} className="min-w-[150px] border-b border-line p-2 align-top font-medium text-fg">
                           <div className="mb-1.5 truncate">{h}</div>
                           <Select value={mapping[i] ?? ''} aria-label={t('import.mapTo', { column: h })} className="h-8 text-xs"
                             onChange={(e) => setMapping(mapping.map((m, j) => (j === i ? e.target.value || null : m === e.target.value ? null : m)))}>
@@ -193,19 +193,19 @@ export function ImportDialog({ entityId, onClose }: { entityId?: string; onClose
                   </thead>
                   <tbody>
                     {preview.map((r, ri) => (
-                      <tr key={ri} className="border-b border-zinc-800/60 last:border-0">
-                        {r.map((c, ci) => <td key={ci} className={cn('max-w-[220px] truncate p-2', mapping[ci] ? 'text-zinc-200' : 'text-zinc-600')}>{c}</td>)}
+                      <tr key={ri} className="border-b border-line/60 last:border-0">
+                        {r.map((c, ci) => <td key={ci} className={cn('max-w-[220px] truncate p-2', mapping[ci] ? 'text-fg' : 'text-fg-subtle')}>{c}</td>)}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               {missingRequired.length > 0 && (
-                <p className="flex items-start gap-2 text-xs text-amber-300">
+                <p className="flex items-start gap-2 text-xs text-warning">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {t('import.missingRequired', { fields: missingRequired.join(', ') })}
                 </p>
               )}
-              <p className="text-xs text-zinc-500">{t('import.formatsHint')}</p>
+              <p className="text-xs text-fg-subtle">{t('import.formatsHint')}</p>
             </>
           ) : (
             <>
@@ -219,10 +219,10 @@ export function ImportDialog({ entityId, onClose }: { entityId?: string; onClose
                   <Input id="new-single" value={names.single} onChange={(e) => setNames({ ...names, single: e.target.value })} />
                 </div>
               </div>
-              <p className="text-sm text-zinc-400">{t('import.columnsHint', { rows: table.rows.length })}</p>
+              <p className="text-sm text-fg-muted">{t('import.columnsHint', { rows: table.rows.length })}</p>
               <div className="space-y-1.5">
                 {columns.map((c, i) => (
-                  <div key={i} className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-2">
+                  <div key={i} className="flex items-center gap-2 rounded-lg border border-line bg-sunken p-2">
                     <Switch checked={c.include} label={t('import.include')} onChange={(v) => setColumns(columns.map((x, j) => (j === i ? { ...x, include: v } : x)))} />
                     <Input value={c.name} aria-label={t('field.name')} className="h-8 flex-1 text-xs"
                       onChange={(e) => setColumns(columns.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
@@ -234,16 +234,16 @@ export function ImportDialog({ entityId, onClose }: { entityId?: string; onClose
                       }}>
                       {PLAIN_TYPES.map((type) => <option key={type} value={type}>{t(`fieldType.${type}` as TKey)}</option>)}
                     </Select>
-                    <span className="w-28 truncate font-mono text-[11px] text-zinc-500" title={c.field.id}>{c.field.id}</span>
+                    <span className="w-28 truncate font-mono text-[11px] text-fg-subtle" title={c.field.id}>{c.field.id}</span>
                   </div>
                 ))}
               </div>
             </>
           )}
-          {error && <p className="flex items-start gap-2 text-sm text-rose-300"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{error}</p>}
+          {error && <p className="flex items-start gap-2 text-sm text-danger"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{error}</p>}
         </div>
-        <div className="flex items-center justify-between gap-3 border-t border-zinc-800 px-6 py-4">
-          <span className="text-xs text-zinc-500">{table ? t('import.footer') : ''}</span>
+        <div className="flex items-center justify-between gap-3 border-t border-line px-6 py-4">
+          <span className="text-xs text-fg-subtle">{table ? t('import.footer') : ''}</span>
           <div className="flex gap-2">
             {table && <Button variant="ghost" onClick={() => setTable(null)}>{t('common.back')}</Button>}
             <Button

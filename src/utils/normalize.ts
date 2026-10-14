@@ -25,6 +25,7 @@ export function normalizeSchema(schema: ClubSchema): ClubSchema {
     ? { enabled: s.dashboard.enabled !== false, widgets: Array.from(new Set(s.dashboard.widgets ?? DEFAULT_DASHBOARD.widgets)) }
     : { ...DEFAULT_DASHBOARD, widgets: [...DEFAULT_DASHBOARD.widgets] };
   s.theme.font = s.theme.font ?? 'inter';
+  s.plugins = (s.plugins ?? []).map((p) => ({ ...p, settings: p.settings ?? {}, enabled: p.enabled !== false }));
   s.entities = s.entities.map((e) => ({ ...e, relations: e.relations ?? [], view: normalizeView(e) }));
   return s;
 }
