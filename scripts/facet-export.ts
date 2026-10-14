@@ -9,6 +9,7 @@
  */
 import fs from 'node:fs';
 import { buildPresetSchema } from '@/data/presets';
+import { withRoles } from '@/utils/access';
 import { buildInstallBundle, buildUpdateBundle } from '@/utils/exporter';
 import { writeBundle } from './lib';
 import { validateSchema } from '@/utils/validate';
@@ -38,7 +39,7 @@ async function main() {
     process.exit(1);
   }
   const schema = args.preset
-    ? normalizeSchema({ ...buildPresetSchema(args.preset as PresetId), editorMode: 'easy' })
+    ? withRoles(normalizeSchema({ ...buildPresetSchema(args.preset as PresetId), editorMode: 'easy' }))
     : readSchema(args.schema).schema;
   const seeds: Record<string, SeedBatch> = {};
   if (args.seeds) {

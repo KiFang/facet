@@ -8,13 +8,15 @@ export type Selection =
   | { kind: 'home' }
   | { kind: 'entity'; id: string }
   | { kind: 'plugins' }
-  | { kind: 'publish' };
+  | { kind: 'publish' }
+  | { kind: 'roles' }
+  | { kind: 'register'; id: string };
 
 export type WorkspaceTab = 'portal' | 'diagram' | 'json';
 
 export type DialogId =
   | 'export' | 'settings' | 'plugins' | 'templates' | 'commands' | 'welcome'
-  | 'shortcuts' | 'about' | 'newModule' | 'import';
+  | 'shortcuts' | 'about' | 'newModule' | 'import' | 'hub';
 
 export type ExportKind = 'install' | 'update' | 'local';
 

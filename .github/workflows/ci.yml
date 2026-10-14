@@ -61,6 +61,48 @@ jobs:
           unzip -q pb.zip pocketbase -d pb
       - run: npm run smoke:pb -- --pb ./pb/pocketbase
 
+  hub:
+    name: Facet Hub (real PocketBase · Docker image)
+    runs-on: ubuntu-latest
+    needs: check
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Download PocketBase
+        run: |
+          curl -fsSL -o pb.zip "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip"
+          unzip -q pb.zip pocketbase -d pb
+      - run: npm run build:hub
+      - run: node scripts/hub-smoke.mjs --pb ./pb/pocketbase
+
+      - name: Docker image — join a club through the container
+        run: |
+          set -eux
+          docker build -f hub/Dockerfile -t facet-hub .
+          docker run -d --name hub -p 8080:8080 -e HUB_ADMIN_EMAIL=it@uni.test -e HUB_ADMIN_PASSWORD=ci-hub-password facet-hub
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
+          B=http://127.0.0.1:8080
+          curl -fsS -c jar -H 'content-type: application/json' -d '{"email":"it@uni.test","password":"ci-hub-password"}' "$B/hub/api/login"
+          INVITE=$(curl -fsS -b jar -H 'content-type: application/json' -d '{"note":"ci"}' "$B/hub/api/admin/invites" | jq -r .code)
+          curl -fsS -H 'content-type: application/json' \
+            -d "{\"invite\":\"$INVITE\",\"slug\":\"ci-club\",\"name\":\"CI\",\"template\":\"general\",\"packs\":[\"cash\"],\"draft\":true,\"chair\":{\"email\":\"chair@uni.test\",\"password\":\"chair-password\"}}" \
+            "$B/hub/api/join" | jq -e '.status == "active"'
+          curl -fsS "$B/c/ci-club/api/health" | jq -e '.code == 200'
+          curl -fsS "$B/c/ci-club/" | grep -q 'src="portal.js"'
+          curl -fsS -H 'content-type: application/json' -d '{"identity":"chair@uni.test","password":"chair-password"}' \
+            "$B/c/ci-club/api/collections/staff/auth-with-password" | jq -e '.record.role == "chair"'
+          docker restart hub
+          for i in $(seq 1 60); do curl -fsS "$B/c/ci-club/api/health" && break; sleep 1; done
+          curl -fsS "$B/c/ci-club/api/health" | jq -e '.code == 200'
+      - if: failure()
+        run: docker logs hub || true
+
   desktop:
     name: Desktop app (Linux, unpackaged)
     runs-on: ubuntu-latest
@@ -104,15 +146,16 @@ jobs:
         run: |
           set -eux
           B=http://127.0.0.1:8080
-          curl -fsS "$B/" | grep -q '/portal.js'
+          curl -fsS "$B/" | grep -q 'src="portal.js"'
           curl -fsS "$B/portal.js" -o /dev/null
           curl -fsS "$B/club-schema.json" | grep -q '"clubName"'
           curl -fsS "$B/api/health" | grep -q '"code":200'
           curl -sSI "$B/" | grep -qi "content-security-policy: default-src 'self'"
           curl -sSI "$B/" | grep -qi 'x-frame-options: SAMEORIGIN'
           curl -sSI "$B/" | grep -qi 'x-content-type-options: nosniff'
-          test "$(curl -s -o /dev/null -w '%{http_code}' "$B/api/collections/events/records")" = 200
-          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{}' "$B/api/collections/events/records")" = 403
+          # Разделы закрыты для гостей: список пустой, запись запрещена.
+          curl -fsS "$B/api/collections/events/records" | jq -e '.totalItems == 0'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{}' "$B/api/collections/events/records")" -ge 400
 
       - name: Superuser from .env, hooks applied, seed a record
         run: |
@@ -125,6 +168,11 @@ jobs:
           curl -fsS -H "Authorization: $TOKEN" "$B/api/settings" | jq -e '.backups.cron == "0 3 * * *" and .meta.appName == "Гильдия Северного кампуса"'
           curl -fsS -X POST -H "Authorization: $TOKEN" -H 'content-type: application/json' \
             -d '{"full_name":"Аня","role":"Президент"}' "$B/api/collections/members/records" | jq -e '.id'
+          # Рабочее место: председатель входит с данными администратора и видит записи.
+          STAFF=$(curl -fsS -X POST -H 'content-type: application/json' \
+            -d '{"identity":"admin@gildiya-severnogo-kampusa.club","password":"ci-password-12345"}' \
+            "$B/api/collections/staff/auth-with-password" | jq -r .token)
+          curl -fsS -H "Authorization: $STAFF" "$B/api/collections/members/records" | jq -e '.totalItems == 1'
 
       - name: backup.sh / restore.sh
         run: |
@@ -133,7 +181,7 @@ jobs:
           ./backup.sh
           ARCHIVE=$(ls backups/pb_data-*.tar.gz | head -1)
           YES=1 ./restore.sh "$ARCHIVE"
-          curl -fsS "http://127.0.0.1:8080/api/collections/members/records" | jq -e '.totalItems == 1'
+          curl -fsS -H "Authorization: $TOKEN" "http://127.0.0.1:8080/api/collections/members/records" | jq -e '.totalItems == 1'
 
       - name: Wrong base is rejected
         run: |
@@ -150,7 +198,7 @@ jobs:
           npm run export -- --schema next.json --base "$PORTAL/club-schema.json" --out ./update
           YES=1 ./update/*-update-*/apply-update.sh "$PORTAL"
           B=http://127.0.0.1:8080
-          curl -fsS "$B/api/collections/members/records" | jq -e '.items[0].name == "Аня" and (.items[0] | has("email"))'
+          curl -fsS -H "Authorization: $TOKEN" "$B/api/collections/members/records" | jq -e '.items[0].name == "Аня" and (.items[0] | has("email"))'
           curl -fsS "$B/club-schema.json" | jq -e '.clubName | endswith("v2")'
           ls -d "$PORTAL"/backups/update-*
           # Переименование клуба не должно создавать новый пустой том с базой.
@@ -161,7 +209,7 @@ jobs:
           set -eux
           cd "$PORTAL"
           YES=1 ./restore.sh "$(ls -d backups/update-* | head -1)"
-          curl -fsS "http://127.0.0.1:8080/api/collections/members/records" | jq -e '.items[0].full_name == "Аня" and (.items[0] | has("email") | not)'
+          curl -fsS -H "Authorization: $TOKEN" "http://127.0.0.1:8080/api/collections/members/records" | jq -e '.items[0].full_name == "Аня" and (.items[0] | has("email") | not)'
           curl -fsS "http://127.0.0.1:8080/club-schema.json" | jq -e '.clubName | endswith("v2") | not'
 
       - name: Login rate limit

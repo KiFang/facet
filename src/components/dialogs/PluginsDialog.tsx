@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import * as RadixDialog from '@radix-ui/react-dialog';
 import { AlertTriangle, Code2, Eye, EyeOff, FileUp, Layers, Palette, Plug, Server, ShieldAlert, Trash2, Wand2 } from 'lucide-react';
-import { useClubStore } from '@/store/useClubStore';
+import { useClubStore, NONE } from '@/store/useClubStore';
 import { useWorkbench } from '@/store/useWorkbench';
 import { useT, useUiLocale, type TKey } from '@/i18n';
 import { getEntityIcon } from '@/lib/icons';
@@ -213,7 +213,7 @@ export function PluginsDialog() {
   const locale = useUiLocale();
   const close = useWorkbench((s) => s.close);
   const initial = useWorkbench((s) => s.dialogArg);
-  const plugins = useClubStore((s) => s.schema.plugins ?? []);
+  const plugins = useClubStore((s) => s.schema.plugins ?? NONE);
   const installPlugin = useClubStore((s) => s.installPlugin);
   const [selected, setSelected] = useState<string | null>(initial ?? plugins[0]?.id ?? BUILTIN_PLUGINS[0].manifest.id);
   const [pending, setPending] = useState<PluginManifest | null>(null);

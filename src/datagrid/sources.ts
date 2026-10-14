@@ -3,6 +3,11 @@ import { useClubStore } from '@/store/useClubStore';
 import { resolveRelations } from '@/utils/relations';
 import { parseDateValue, parseNumberValue, splitLinks } from '@/utils/migrations/seeds';
 import type { CellValue, DataSourceApi, GridColumn, RelationOption, SaveChanges, SaveResult } from './types';
+import { POSTED_FIELD } from '@/utils/registers';
+import { translate, useUiStore } from '@/i18n';
+
+const YES_NO = () => (useUiStore.getState().locale === 'en' ? ['Yes', 'No'] : ['Да', 'Нет']);
+const postedLabel = () => translate(useUiStore.getState().locale, 'grid.posted');
 
 /* --------------------------------- columns ---------------------------------- */
 
@@ -175,6 +180,8 @@ export function serverSource(auth: ServerAuth, kind: 'server' | 'local' = 'serve
   };
 
   const toPb = (col: GridColumn, v: CellValue): unknown => {
+    // Как в форме рабочего места: новая операция по умолчанию подтверждена.
+    if (col.key === POSTED_FIELD) return v !== YES_NO()[1];
     if (col.type === 'relation') {
       const ids = Array.isArray(v) ? v : v ? [String(v)] : [];
       return col.multiple ? ids : (ids[0] ?? '');
@@ -212,6 +219,8 @@ export function serverSource(auth: ServerAuth, kind: 'server' | 'local' = 'serve
     files: true,
     async columns(entity) {
       const cols = columnsOf(schema(), entity);
+      // Операции: «Подтверждена» — учитывается ли в остатках.
+      if (entity.kind === 'operation') cols.push({ key: POSTED_FIELD, label: postedLabel(), type: 'select', required: false, options: YES_NO() });
       try {
         const col = await call<{ fields: { name: string }[] }>(`/api/collections/${encodeURIComponent(entity.id)}`);
         const names = new Set(col.fields.map((f) => f.name));
@@ -233,6 +242,7 @@ export function serverSource(auth: ServerAuth, kind: 'server' | 'local' = 'serve
             const v = r[c.key];
             if (c.type === 'relation' || c.type === 'file') return [c.key, Array.isArray(v) ? v.map(String) : v ? [String(v)] : []];
             if (c.type === 'date') return [c.key, fromPbDate(v)];
+            if (c.key === POSTED_FIELD) return [c.key, v ? YES_NO()[0] : YES_NO()[1]];
             if (c.type === 'number') return [c.key, v === null || v === undefined || v === '' ? '' : Number(v)];
             return [c.key, v === null || v === undefined ? '' : String(v)];
           }),

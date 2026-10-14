@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Подключить клуб — {{hubName}}</title>
+  <link rel="stylesheet" href="/hub/static/hub.css" />
+  <style>:root { --accent: {{accent}}; }</style>
+  <script src="/hub/static/join.js" defer></script>
+</head>
+<body>
+  <main class="narrow">
+    <p><a href="/">← {{hubName}}</a></p>
+    <h1>Подключить клуб</h1>
+    <p class="muted">Система клуба развернётся на сервере вуза за минуту.</p>
+    <div class="alert" id="access"></div>
+
+    <form id="join" novalidate>
+      <div id="invite-box">
+        <label for="invite">Код приглашения</label>
+        <input id="invite" name="invite" autocomplete="off" placeholder="inv_…" />
+        <div class="hint">Его выдаёт администратор хаба в вузе.</div>
+      </div>
+
+      <label for="name">Название клуба</label>
+      <input id="name" name="name" required maxlength="80" placeholder="Клуб настольных игр" />
+
+      <label for="slug">Адрес</label>
+      <input id="slug" name="slug" required maxlength="40" pattern="[a-z0-9-]+" placeholder="boardgames" />
+      <div class="hint">Система будет по адресу <code id="slug-preview">/c/…/</code></div>
+
+      <h3>С чего начать</h3>
+      <div class="choice" id="templates"></div>
+
+      <h3>Учёт</h3>
+      <div id="packs"></div>
+      <label class="check" id="draft-box"><input type="checkbox" id="draft" checked /> <span>Заполнить черновыми данными<small>Примеры записей, чтобы сразу посмотреть, как всё работает. Их можно удалить.</small></span></label>
+
+      <h3>Председатель</h3>
+      <label for="chair-name">Имя</label>
+      <input id="chair-name" autocomplete="name" maxlength="80" />
+      <label for="chair-email">Почта (логин)</label>
+      <input id="chair-email" type="email" autocomplete="email" required />
+      <div class="hint" id="domains"></div>
+      <label for="chair-password">Пароль</label>
+      <input id="chair-password" type="password" autocomplete="new-password" minlength="8" required />
+      <div class="hint">Не короче 8 символов. Остальной актив председатель добавит сам в разделе «Сотрудники».</div>
+
+      <div id="error" class="alert error hidden" role="alert"></div>
+      <p><button class="btn primary" type="submit" id="submit">Подключить</button></p>
+    </form>
+
+    <div id="done" class="hidden">
+      <div class="alert ok" id="done-text"></div>
+      <div class="secret">
+        <b>Ключ для редактора Facet OS</b>
+        <p class="hint">Нужен, чтобы менять структуру системы из редактора («Публикация → Хаб вуза»). Сохраните его — повторно он не показывается.</p>
+        <p><code id="token"></code></p>
+        <button class="btn small" type="button" id="copy-token">Скопировать</button>
+      </div>
+      <p><a class="btn primary" id="open-club" href="#">Открыть систему клуба</a></p>
+    </div>
+    <footer>Facet Hub {{version}}</footer>
+  </main>
+</body>
+</html>

@@ -8,6 +8,9 @@ import {
   portalFeatureSet, recordTitle, relationsOf, statusFieldOf, titleFieldOf,
 } from './model';
 import type { DataSource, PortalAssets, PortalRecord } from './types';
+import { renderUserBar, type MovementsState, type WorkspaceCtx } from './workspace';
+import { balances } from '@/utils/registers';
+import { basisActions } from './basis';
 
 /* Чистые функции: состояние → HTML-строка. Никакого DOM — легко тестировать и встраивать в превью. */
 
@@ -30,6 +33,15 @@ export interface RenderCtx {
   assets: PortalAssets;
   data: (entityId: string) => LoadState | undefined;
   now: Date;
+  /** Рабочее место: пользователь и права. Нет — режим просмотра (тесты, старые схемы). */
+  ws?: WorkspaceCtx;
+  /** Движения регистров (для остатков на главной). */
+  movements?: (registerId: string) => MovementsState | undefined;
+}
+
+/** Может ли текущий пользователь менять раздел прямо в портале. */
+export function canWrite(ctx: RenderCtx, entity: ClubEntity): boolean {
+  return !!ctx.ws && !ctx.ws.legacy && ctx.ws.writable && ctx.ws.access(entity) === 'write';
 }
 
 export interface EntityUiState {
@@ -122,7 +134,17 @@ export function renderShell(ctx: RenderCtx, active: string, body: string): strin
   const { schema, t } = ctx;
   const dashboard = schema.dashboard?.enabled !== false;
   const logo = ctx.assets.logoUrl ? `<img class="fx-logo" src="${esc(ctx.assets.logoUrl)}" alt="">` : '';
-  const admin = schema.entities[0] ? ctx.source.editUrl(schema.entities[0]) : null;
+  const legacy = !ctx.ws || ctx.ws.legacy;
+  const admin = legacy && schema.entities[0] ? ctx.source.editUrl(schema.entities[0]) : null;
+  const balancesTab = ctx.ws?.registers.length
+    ? `<a class="fx-tab" ${navAttr('/balances')}${active === '/balances' ? ' aria-current="page"' : ''}>${icon('Wallet', 15)}${esc(t('balances'))}</a>`
+    : '';
+  const reportsTab = ctx.ws && !ctx.ws.legacy && (ctx.ws.user || !ctx.ws.hasPublic) && schema.entities.length
+    ? `<a class="fx-tab" ${navAttr('/reports')}${active === '/reports' ? ' aria-current="page"' : ''}>${icon('ChartColumn', 15)}${esc(t('rep.title'))}</a>`
+    : '';
+  const staffTab = ctx.ws?.canStaff
+    ? `<a class="fx-tab" ${navAttr('/staff')}${active === '/staff' ? ' aria-current="page"' : ''}>${icon('Users', 15)}${esc(t('staff'))}</a>`
+    : '';
   const tabs = [
     dashboard ? `<a class="fx-tab" ${navAttr('/')}${active === '' ? ' aria-current="page"' : ''}>${icon('House', 15)}${esc(t('home'))}</a>` : '',
     ...schema.entities.map((e) => {
@@ -130,6 +152,9 @@ export function renderShell(ctx: RenderCtx, active: string, body: string): strin
       const count = state?.status === 'ok' ? `<span class="fx-count">${state.records.length}</span>` : '';
       return `<a class="fx-tab" ${navAttr(`/${e.id}`)}${active === e.id ? ' aria-current="page"' : ''}>${icon(e.icon, 15)}${esc(e.pluralName)}${count}</a>`;
     }),
+    balancesTab,
+    reportsTab,
+    staffTab,
   ].join('');
 
   return `<div class="fx-shell">
@@ -138,6 +163,7 @@ export function renderShell(ctx: RenderCtx, active: string, body: string): strin
   <div class="fx-hero-actions">
     <button type="button" class="fx-btn fx-btn-ghost" data-refresh title="${esc(t('refresh'))}" aria-label="${esc(t('refresh'))}">${icon('RefreshCw', 15)}</button>
     ${admin ? `<a class="fx-btn fx-btn-accent" href="${esc(admin.replace(/\?.*$/, ''))}" target="_blank" rel="noopener">${icon('ExternalLink', 15)}${esc(t('admin'))}</a>` : ''}
+    ${ctx.ws ? renderUserBar(ctx, ctx.ws) : ''}
   </div>
 </header>
 <nav class="fx-nav">${tabs}</nav>
@@ -191,9 +217,11 @@ export function renderEntityPage(ctx: RenderCtx, entity: ClubEntity, ui: EntityU
     features.has('csv') ? `<button type="button" class="fx-btn fx-btn-ghost" data-csv title="${esc(t('csvTitle'))}">${icon('FileText', 15)}${esc(t('csv'))}</button>` : '',
     features.has('print') ? `<button type="button" class="fx-btn fx-btn-ghost" data-print>${icon('Ticket', 15)}${esc(t('print'))}</button>` : '',
   ].join('');
+  const writable = canWrite(ctx, entity);
+  const addBtn = writable ? `<a class="fx-btn fx-btn-accent" data-testid="fx-add" ${navAttr(`/${entity.id}/new`)}>${icon('Plus', 15)}${esc(t('add'))}</a>` : '';
   const head = `<div class="fx-toolbar">
   <h2>${icon(entity.icon, 20)}${esc(entity.pluralName)}</h2>
-  <div class="fx-toolbar-actions">${tools}${switcher}<label class="fx-search-wrap">${icon('Search', 15)}<input class="fx-search" type="search" data-search placeholder="${esc(t('search'))}" value="${esc(ui.query)}" aria-label="${esc(t('search'))}"></label></div>
+  <div class="fx-toolbar-actions">${addBtn}${tools}${switcher}<label class="fx-search-wrap">${icon('Search', 15)}<input class="fx-search" type="search" data-search placeholder="${esc(t('search'))}" value="${esc(ui.query)}" aria-label="${esc(t('search'))}"></label></div>
 </div><hr class="fx-divider">`;
 
   const loading = renderLoadState(ctx, ctx.data(entity.id));
@@ -201,9 +229,12 @@ export function renderEntityPage(ctx: RenderCtx, entity: ClubEntity, ui: EntityU
   const all = (ctx.data(entity.id) as Extract<LoadState, { status: 'ok' }>).records;
 
   if (!all.length) {
-    const url = ctx.source.editUrl(entity);
+    if (writable) {
+      return head + renderEmpty(t('empty'), t('addFirstHere', { name: entity.name }), `<a class="fx-btn fx-btn-accent" ${navAttr(`/${entity.id}/new`)}>${icon('Plus', 15)}${esc(t('add'))}</a>`);
+    }
+    const url = !ctx.ws || ctx.ws.legacy ? ctx.source.editUrl(entity) : null;
     const action = url ? `<a class="fx-btn" href="${esc(url)}" target="_blank" rel="noopener">${icon('ExternalLink', 15)}${esc(t('openCollection'))}</a>` : '';
-    return head + renderEmpty(t('empty'), t('addFirst', { name: entity.name }), action);
+    return head + renderEmpty(t('empty'), url ? t('addFirst', { name: entity.name }) : '', action);
   }
   const records = filterRecords(ctx, entity, all, ui.query);
   if (!records.length) return head + renderEmpty(t('nothingFound'), t('tryAnother'));
@@ -218,6 +249,11 @@ export function renderEntityPage(ctx: RenderCtx, entity: ClubEntity, ui: EntityU
     default:
       return head + renderCards(ctx, entity, records);
   }
+}
+
+/** Пометка «Черновик» у неподтверждённой операции. */
+function draftBadge(ctx: RenderCtx, entity: ClubEntity, record: PortalRecord): string {
+  return entity.kind === 'operation' && !record.posted ? `<span class="fx-badge fx-draft">${esc(ctx.t('draft'))}</span>` : '';
 }
 
 /* ---------------------------------- cards ---------------------------------- */
@@ -243,7 +279,7 @@ function renderCard(ctx: RenderCtx, entity: ClubEntity, record: PortalRecord, co
           return chips ? `<div class="fx-row"><dt>${esc(r.label)}</dt><dd>${chips}</dd></div>` : '';
         })
         .join('');
-  const statusValue = status && record[status.id] ? badge(status, String(record[status.id])) : '';
+  const statusValue = (status && record[status.id] ? badge(status, String(record[status.id])) : '') + draftBadge(ctx, entity, record);
   return `<article class="fx-card${compact ? ' fx-card-compact' : ''}" data-nav="${esc(recordPath(entity, record))}" tabindex="0" role="link">
 ${cover ? `<div class="fx-card-media" style="background-image:url('${esc(cover)}')"></div>` : ''}
 <div class="fx-card-head"><h3>${esc(recordTitle(entity, record, ctx.t('untitled')))}</h3>${statusValue}</div>
@@ -295,7 +331,7 @@ function renderTable(ctx: RenderCtx, entity: ClubEntity, records: PortalRecord[]
       const cells = entity.fields
         .map((f) => {
           const v = fieldValue(ctx, entity, f, r);
-          if (f === tf) return `<td class="fx-td-title"><a ${navAttr(recordPath(entity, r))}>${esc(recordTitle(entity, r, ctx.t('untitled')))}</a></td>`;
+          if (f === tf) return `<td class="fx-td-title"><a ${navAttr(recordPath(entity, r))}>${esc(recordTitle(entity, r, ctx.t('untitled')))}</a> ${draftBadge(ctx, entity, r)}</td>`;
           return `<td>${v || '<span class="fx-muted">—</span>'}</td>`;
         })
         .concat(extraRelations.map((rel) => `<td>${relationChips(ctx, r, rel) || '<span class="fx-muted">—</span>'}</td>`))
@@ -384,6 +420,25 @@ ${undated ? `<p class="fx-muted">${esc(ctx.t('noDate', { n: undated }))}</p>` : 
 
 /* --------------------------------- detail ---------------------------------- */
 
+/** Название записи для измерения-ссылки (или само значение). */
+export function dimTitle(ctx: RenderCtx, target: string | undefined, value: string): string {
+  if (!target || !value) return value;
+  const e = ctx.schema.entities.find((x) => x.id === target);
+  const st = e && ctx.data(e.id);
+  const rec = st?.status === 'ok' ? st.records.find((r) => r.id === value) : undefined;
+  return e && rec ? recordTitle(e, rec, value) : value;
+}
+
+/** Кнопки «Создать на основании» на странице записи. */
+function basisBlock(ctx: RenderCtx, entity: ClubEntity): string {
+  if (!ctx.ws || ctx.ws.legacy || !ctx.ws.writable) return '';
+  const actions = basisActions(ctx.schema, entity, (e) => canWrite(ctx, e));
+  if (!actions.length) return '';
+  return `<div class="fx-basis"><span class="fx-muted">${esc(ctx.t('createBasis'))}:</span>${actions
+    .map((a) => `<button type="button" class="fx-btn fx-btn-ghost" data-basis="${esc(a.target.id)}"${a.rule === null ? '' : ` data-rule="${a.rule}"`}>${icon(a.target.icon, 15)}${esc(a.label)}</button>`)
+    .join('')}</div>`;
+}
+
 export interface Backlink {
   entity: ClubEntity;
   label: string;
@@ -418,7 +473,8 @@ export function renderDetail(ctx: RenderCtx, entity: ClubEntity, recordId: strin
   if (!record) return back + renderEmpty(t('recordNotFound'), t('recordNotFoundHint'));
 
   const status = statusFieldOf(entity);
-  const editUrl = ctx.source.editUrl(entity, record);
+  const editUrl = !ctx.ws || ctx.ws.legacy ? ctx.source.editUrl(entity, record) : null;
+  const writable = canWrite(ctx, entity);
   const images = entity.fields
     .filter((f) => f.type === 'file')
     .flatMap((f) => fileNames(record[f.id]).filter(isImage))
@@ -459,11 +515,26 @@ export function renderDetail(ctx: RenderCtx, entity: ClubEntity, recordId: strin
   <header class="fx-detail-head">
     <div><h2>${esc(recordTitle(entity, record, t('untitled')))}</h2>${meta ? `<p class="fx-muted">${esc(meta)}</p>` : ''}</div>
     <div class="fx-detail-actions">${status && record[status.id] ? badge(status, String(record[status.id])) : ''}${
+      entity.kind === 'operation' ? (record.posted ? `<span class="fx-badge fx-posted-badge">${icon('CircleCheck', 13)}${esc(t('posted'))}</span>` : draftBadge(ctx, entity, record)) : ''
+    }${
       portalFeatureSet(ctx.schema).has('print') ? `<button type="button" class="fx-btn fx-btn-ghost" data-print>${icon('Ticket', 15)}${esc(t('print'))}</button>` : ''
     }${
       editUrl ? `<a class="fx-btn" href="${esc(editUrl)}" target="_blank" rel="noopener">${icon('Pencil', 15)}${esc(t('edit'))}</a>` : ''
+    }${
+      writable && entity.kind === 'operation'
+        ? record.posted
+          ? `<button type="button" class="fx-btn fx-btn-ghost" data-post="false">${icon('Undo2', 15)}${esc(t('unpost'))}</button>`
+          : `<button type="button" class="fx-btn" data-post="true">${icon('CircleCheck', 15)}${esc(t('post'))}</button>`
+        : ''
+    }${
+      writable
+        ? `<a class="fx-btn fx-btn-accent" data-testid="fx-edit" ${navAttr(`/${entity.id}/${record.id}/edit`)}>${icon('Pencil', 15)}${esc(t('edit'))}</a><button type="button" class="fx-btn fx-btn-ghost fx-danger" data-delete="${esc(record.id)}" data-title="${esc(recordTitle(entity, record, t('untitled')))}">${icon('Trash2', 15)}${esc(t('delete'))}</button>`
+        : ''
     }</div>
   </header>
+  ${entity.printForms?.length ? `<div class="fx-basis"><span class="fx-muted">${esc(t('printForms'))}:</span>${entity.printForms
+    .map((f) => `<a class="fx-btn fx-btn-ghost" data-print-link="${esc(f.id)}" ${navAttr(`/${entity.id}/${record.id}/print/${f.id}`)}>${icon('Printer', 15)}${esc(f.name)}</a>`).join('')}</div>` : ''}
+  ${basisBlock(ctx, entity)}
   ${images.length ? `<div class="fx-gallery">${images.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}
   <section class="fx-panel"><h3>${esc(t('details'))}</h3><dl class="fx-rows fx-rows-wide">${rows}${relRows}</dl></section>
   <section class="fx-panel"><h3>${icon('Link', 16)}${esc(t('related'))}</h3>${related}</section>
@@ -482,7 +553,45 @@ export function renderDashboard(ctx: RenderCtx): string {
   };
   const anyLoading = schema.entities.some((e) => !ctx.data(e.id) || ctx.data(e.id)!.status === 'loading');
 
+  const regs = ctx.ws?.registers ?? [];
+  const regRows = (id: string) => {
+    const st = ctx.movements?.(id);
+    const reg = regs.find((r) => r.id === id)!;
+    return st?.status === 'ok' ? balances(reg, st.rows) : null;
+  };
+  const num = (n: number) => n.toLocaleString(ctx.locale, { maximumFractionDigits: 2 });
+
   for (const w of widgets) {
+    if (w === 'attention' && (regs.length || schema.entities.some((e) => e.kind === 'operation'))) {
+      const items: string[] = [];
+      for (const e of schema.entities.filter((x) => x.kind === 'operation')) {
+        const drafts = (ok(e) ?? []).filter((r) => !r.posted);
+        if (!drafts.length) continue;
+        items.push(`<li class="fx-attn-item">${icon('CircleDashed', 15)}<div><a ${navAttr(`/${e.id}`)}><b>${esc(e.pluralName)}</b></a> — ${esc(t('drafts', { n: drafts.length }))}<div class="fx-attn-links">${drafts
+          .slice(0, 4).map((r) => `<a class="fx-chip" ${navAttr(recordPath(e, r))}>${esc(recordTitle(e, r, t('untitled')))}</a>`).join('')}</div></div></li>`);
+      }
+      for (const reg of regs) {
+        const rows = regRows(reg.id);
+        const neg = (rows ?? []).filter((r) => reg.resources.some((x) => r.res[x.id] < -1e-9));
+        if (!neg.length) continue;
+        items.push(`<li class="fx-attn-item fx-attn-warn">${icon('TriangleAlert', 15)}<div><a ${navAttr('/balances')}><b>${esc(reg.name)}</b></a> — ${esc(t('negative'))}: ${neg
+          .slice(0, 4).map((r) => esc(reg.dimensions.map((d) => dimTitle(ctx, d.target, r.dims[d.id])).filter(Boolean).join(' · ') || '—')).join(', ')}</div></li>`);
+      }
+      const loading = schema.entities.some((e) => e.kind === 'operation' && !ok(e)) || regs.some((r) => !regRows(r.id));
+      parts.push(`<section class="fx-panel fx-attention"><h3>${icon('ListChecks', 16)}${esc(t('attention'))}</h3>${
+        items.length ? `<ul class="fx-attn-list">${items.join('')}</ul>` : loading ? `<p class="fx-muted">${esc(t('loading'))}</p>` : `<p class="fx-muted">${icon('CircleCheck', 14)} ${esc(t('allGood'))}</p>`
+      }</section>`);
+    }
+    if (w === 'balances' && regs.length) {
+      parts.push(`<section class="fx-stats">${regs
+        .map((reg) => {
+          const rows = regRows(reg.id);
+          const main = reg.resources[0];
+          const total = rows ? rows.reduce((n, r) => n + r.res[main.id], 0) : null;
+          return `<a class="fx-stat" ${navAttr('/balances')} data-reg-total="${esc(reg.id)}"><span class="fx-stat-icon">${icon(reg.icon ?? 'Wallet', 18)}</span><span class="fx-stat-num${total !== null && total < 0 ? ' fx-neg' : ''}">${total === null ? '…' : esc(num(total))}</span><span class="fx-stat-label">${esc(reg.name)}${rows && reg.dimensions.length ? ` · ${esc(t('positions', { n: rows.length }))}` : ''}</span></a>`;
+        })
+        .join('')}</section>`);
+    }
     if (w === 'stats') {
       parts.push(`<section class="fx-stats">${schema.entities
         .map((e) => {

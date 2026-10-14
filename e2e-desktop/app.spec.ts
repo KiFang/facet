@@ -55,7 +55,7 @@ test('система клуба ставится, обновляется без 
   const installed = await info();
   expect(installed.running).toBe(true);
   const base = installed.url!;
-  expect(await (await fetch(`${base}/`)).text()).toContain('/portal.js');
+  expect(await (await fetch(`${base}/`)).text()).toContain('src="portal.js"');
   expect((await (await fetch(`${base}/club-schema.json`)).json()).clubName).toBe('Гильдия Северного кампуса');
 
   // Данные через API (как это сделал бы администратор в панели)
@@ -105,7 +105,7 @@ test('система клуба ставится, обновляется без 
     return i.running && i.backups.length;
   }, { timeout: 60_000 }).toBe(2);
   const updated = await info();
-  const members = await (await fetch(`${updated.url}/api/collections/members/records`)).json();
+  const members = await (await fetch(`${updated.url}/api/collections/members/records`, { headers: { Authorization: auth.token } })).json();
   expect(members.items).toHaveLength(1);
   expect(members.items[0]).toMatchObject({ full_name: 'Аня', field: '' });
 
@@ -122,7 +122,7 @@ test('система клуба ставится, обновляется без 
   await data.keyboard.press('Enter');
   await data.keyboard.press('Control+KeyS');
   await expect(data.getByText(/Сохранено на сервере: 1/)).toBeVisible();
-  const edited = await (await fetch(`${updated.url}/api/collections/members/records`)).json();
+  const edited = await (await fetch(`${updated.url}/api/collections/members/records`, { headers: { Authorization: auth.token } })).json();
   expect(edited.items[0].full_name).toBe('Анна');
   await data.close();
 
@@ -140,7 +140,7 @@ test('система клуба ставится, обновляется без 
   }, { timeout: 60_000 }).toBe(1);
   const rolled = await info();
   expect((await (await fetch(`${rolled.url}/club-schema.json`)).json()).motto).toBe('Новый девиз');
-  const after = await (await fetch(`${rolled.url}/api/collections/members/records`)).json();
+  const after = await (await fetch(`${rolled.url}/api/collections/members/records`, { headers: { Authorization: auth.token } })).json();
   expect(after.items[0].full_name).toBe('Аня'); // правка «Анна» была после копии — откат её убирает
   expect('field' in after.items[0]).toBe(false);
 

@@ -7,3 +7,5 @@ test-results
 playwright-report
 release
 desktop/bin
+hub/dist
+hub-data

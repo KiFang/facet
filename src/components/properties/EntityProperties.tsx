@@ -3,7 +3,7 @@ import {
   ArrowDown, ArrowRight, ArrowUp, Calendar, CalendarDays, CircleDot, Columns3, Database, File, FileSpreadsheet, Hash,
   LayoutGrid, Link2, ListChecks, Plus, Table, Trash2, Type, X, type LucideIcon,
 } from 'lucide-react';
-import { useClubStore } from '@/store/useClubStore';
+import { useClubStore, NONE } from '@/store/useClubStore';
 import { useSettings } from '@/store/useSettings';
 import { useWorkbench } from '@/store/useWorkbench';
 import type { ClubEntity, EntityField, FieldType, RelationType, ViewType } from '@/types/schema';
@@ -22,6 +22,11 @@ import { Section } from '../ui/Section';
 import { Tip } from '../ui/Tooltip';
 import { toast } from '../ui/Toast';
 import { PropertyPage } from './PropertyPage';
+import { AccessCell } from './RolesProperties';
+import { PostingsEditor } from './PostingsEditor';
+import { BasisEditor } from './BasisEditor';
+import { PrintFormsEditor } from './PrintFormsEditor';
+import { accessOf, CHAIR_ROLE } from '@/utils/access';
 
 export const FIELD_ICONS: Record<FieldType, LucideIcon> = {
   text: Type,
@@ -408,13 +413,71 @@ export function EntityProperties({ entity }: { entity: ClubEntity }) {
         </Section>
       )}
 
+      <Section title={t('kind.title')} action={<span className="text-2xs text-fg-subtle">{t('kind.hint')}</span>}>
+        <Segmented
+          ariaLabel={t('kind.title')}
+          value={entity.kind ?? 'catalog'}
+          onChange={(kind) => updateEntity(entity.id, { kind: kind === 'operation' ? 'operation' : undefined })}
+          options={[
+            { value: 'catalog', label: t('kind.catalog'), title: t('kind.catalogHint') },
+            { value: 'operation', label: t('kind.operation'), title: t('kind.operationHint') },
+          ]}
+        />
+        <p className="text-2xs text-fg-subtle">{entity.kind === 'operation' ? t('kind.operationHint') : t('kind.catalogHint')}</p>
+        {entity.kind === 'operation' && <PostingsEditor entity={entity} />}
+      </Section>
+
+      <Section title={t('pf.title')}>
+        <PrintFormsEditor entity={entity} />
+      </Section>
+
+      {editable && (
+        <Section title={t('basis.title')}>
+          <BasisEditor entity={entity} />
+        </Section>
+      )}
+
       <Section title={t('view.title')} action={<span className="text-2xs text-fg-subtle">{t('view.hint')}</span>}>
         <ViewEditor entity={entity} />
       </Section>
 
+      <Section title={t('access.title')} action={<Button size="xs" variant="ghost" onClick={() => select({ kind: 'roles' })}>{t('access.allRoles')}</Button>}>
+        <EntityAccess entity={entity} />
+      </Section>
       <Section title={t('data.title')}>
         <DataSection entity={entity} />
       </Section>
     </PropertyPage>
+  );
+}
+
+function EntityAccess({ entity }: { entity: ClubEntity }) {
+  const t = useT();
+  const roles = useClubStore((s) => s.schema.roles ?? NONE);
+  const setRoleAccess = useClubStore((s) => s.setRoleAccess);
+  const setEntityPublic = useClubStore((s) => s.setEntityPublic);
+  return (
+    <div className="space-y-2">
+      <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, roles.length)}, minmax(0, 1fr))` }}>
+        {roles.map((r) => (
+          <div key={r.id} className="min-w-0 text-center">
+            <div className="mb-1 truncate text-2xs text-fg-muted" title={r.name}>{r.name}</div>
+            <AccessCell
+              level={r.id === CHAIR_ROLE ? 'write' : accessOf(r, entity.id)}
+              disabled={r.id === CHAIR_ROLE}
+              label={`${r.name} · ${entity.pluralName}`}
+              onChange={(l) => setRoleAccess(r.id, entity.id, l)}
+            />
+          </div>
+        ))}
+      </div>
+      <label className="flex items-center justify-between gap-3 rounded-md border border-line px-2.5 py-2">
+        <span>
+          <span className="block text-xs text-fg">{t('access.public')}</span>
+          <span className="block text-2xs text-fg-subtle">{t('access.publicHint')}</span>
+        </span>
+        <Switch checked={!!entity.public} label={t('access.public')} onChange={(v) => setEntityPublic(entity.id, v)} />
+      </label>
+    </div>
   );
 }

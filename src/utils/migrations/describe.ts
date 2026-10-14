@@ -14,6 +14,10 @@ const RU: Record<SchemaChange['kind'], string> = {
   'field-values-added': '{collection}: в «{field}» добавлены варианты {values}',
   'relation-narrowed': '{collection}: связь «{field}» теперь одиночная — у записей останется только первая ссылка',
   'relation-widened': '{collection}: связь «{field}» теперь допускает несколько записей',
+  'staff-enabled': 'Вход для актива: учётные записи сотрудников и роли (первый вход — председатель с данными администратора из .env)',
+  'access-private': '{collection}: раздел больше не виден без входа — только активу по ролям',
+  'access-public': '{collection}: раздел стал виден без входа',
+  'access-changed': '{collection}: изменились права ролей',
 };
 
 const EN: Record<SchemaChange['kind'], string> = {
@@ -29,6 +33,10 @@ const EN: Record<SchemaChange['kind'], string> = {
   'field-values-added': '{collection}: options {values} added to “{field}”',
   'relation-narrowed': '{collection}: link “{field}” is now single — records keep only the first link',
   'relation-widened': '{collection}: link “{field}” now allows multiple records',
+  'staff-enabled': 'Staff sign-in: staff accounts and roles (first sign-in is the chair with the admin credentials from .env)',
+  'access-private': '{collection}: no longer visible without signing in — staff only, by role',
+  'access-public': '{collection}: now visible without signing in',
+  'access-changed': '{collection}: role permissions changed',
 };
 
 export function describeChange(change: SchemaChange, locale: Locale = 'ru'): string {

@@ -67,7 +67,7 @@ echo "→ Резервная копия базы…"
 
 echo "→ Копирую новые файлы…"
 # Файлы плагинов генерируются целиком — убираем прежние (в т.ч. отключённых плагинов).
-rm -f "$TARGET"/pocketbase/pb_hooks/plugin-*.pb.js
+rm -f "$TARGET"/pocketbase/pb_hooks/plugin-*.pb.js "$TARGET"/pocketbase/pb_hooks/facet-registers.*
 rm -rf "$TARGET/web/plugins"
 cp -R "$HERE/payload/." "$TARGET/"
 while IFS= read -r LINE || [ -n "$LINE" ]; do

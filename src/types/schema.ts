@@ -92,9 +92,86 @@ export interface ClubEntity {
   relations: EntityRelation[];
   /** Вид раздела в портале. По умолчанию — карточки. */
   view?: EntityView;
+  /** Раздел виден без входа (например, афиша мероприятий). По умолчанию — только для актива. */
+  public?: boolean;
+  /**
+   * `operation` — операция (как документ в 1С): при подтверждении пишет движения в регистры остатков.
+   * По умолчанию — справочник (просто список записей).
+   */
+  kind?: 'catalog' | 'operation';
+  /** Как операция меняет остатки. */
+  postings?: Posting[];
+  /**
+   * «Ввод на основании»: из записи раздела `from` создаётся запись этого раздела —
+   * совпадающие поля копируются, `set` задаёт значения (например, вид «Возврат»).
+   */
+  basedOn?: BasisRule[];
+  /** Печатные формы: акт, ордер, протокол — шаблоны с подстановкой полей. */
+  printForms?: PrintForm[];
 }
 
-export type DashboardWidget = 'stats' | 'upcoming' | 'statuses' | 'recent';
+export interface PrintForm {
+  id: string;
+  name: string;
+  /**
+   * Шаблон: строки «# », «## », таблицы «| … |», «---», **жирный**;
+   * {{Название поля}} или {{id_поля}}, а также {{клуб}}, {{сегодня}}, {{сотрудник}}, {{номер}}.
+   */
+  body: string;
+}
+
+export interface BasisRule {
+  from: string;
+  label: string;
+  set?: Record<string, string>;
+}
+
+/** Направление движения: всегда приход, всегда расход или по значению поля операции. */
+export type PostingDirection = 'in' | 'out' | { field: string; in: string[]; out: string[] };
+
+/** Правило проведения операции в регистр. */
+export interface Posting {
+  register: string;
+  direction: PostingDirection;
+  /** Измерение регистра → поле операции. */
+  dimensions: Record<string, string>;
+  /** Ресурс регистра → числовое поле операции (или '1' — каждая операция считается за единицу). */
+  resources: Record<string, string>;
+  /** Поле даты операции (для отчётов за период). Нет — дата создания. */
+  dateField?: string;
+}
+
+/** Регистр остатков: по чему считать (измерения) и что суммировать (ресурсы). */
+export interface ClubRegister {
+  /** Латиница; коллекция в базе — `reg_<id>`. */
+  id: string;
+  /** Неизменяемый ключ для сравнения версий (как у разделов). */
+  uid?: string;
+  name: string;
+  icon?: string;
+  dimensions: { id: string; name: string; /** Раздел, на записи которого ссылается измерение. */ target?: string }[];
+  resources: { id: string; name: string; /** Денежный ресурс — показывается с валютой. */ money?: boolean }[];
+  /** Остаток не может стать отрицательным — сервер отклонит такую операцию. */
+  noNegative?: boolean;
+}
+
+/** Уровень доступа роли к разделу. */
+export type AccessLevel = 'none' | 'read' | 'write';
+
+/** Роль в активе клуба: председатель, казначей, завхоз… */
+export interface ClubRole {
+  /** Латиница; хранится в учётной записи сотрудника. `chair` — председатель, всегда есть. */
+  id: string;
+  name: string;
+  /** Доступ к разделам, для которых не задано отдельно. */
+  default: AccessLevel;
+  /** Доступ по разделам (ключ — id раздела). */
+  access?: Record<string, AccessLevel>;
+  /** Может добавлять сотрудников и назначать роли. */
+  manageStaff?: boolean;
+}
+
+export type DashboardWidget = 'attention' | 'balances' | 'stats' | 'upcoming' | 'statuses' | 'recent';
 
 export interface DashboardConfig {
   enabled: boolean;
@@ -113,9 +190,16 @@ export interface ClubSchema {
   dashboard?: DashboardConfig;
   /** Подключённые плагины (без секретов — они только в .env сервера). */
   plugins?: InstalledPlugin[];
+  /**
+   * Роли актива. Нет поля — схема старой версии: все разделы публичны на чтение,
+   * правка только через панель PocketBase (так считается и версия на сервере).
+   */
+  roles?: ClubRole[];
+  /** Регистры остатков (касса, инвентарь на руках, склад). */
+  registers?: ClubRegister[];
 }
 
-export const DEFAULT_DASHBOARD: DashboardConfig = { enabled: true, widgets: ['stats', 'upcoming', 'statuses', 'recent'] };
+export const DEFAULT_DASHBOARD: DashboardConfig = { enabled: true, widgets: ['attention', 'balances', 'stats', 'upcoming', 'statuses', 'recent'] };
 
 /** Ключ сущности/поля для сравнения версий схемы. */
 export const keyOf = (x: { id: string; uid?: string }): string => x.uid ?? x.id;

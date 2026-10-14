@@ -1,5 +1,5 @@
 import * as Menubar from '@radix-ui/react-menubar';
-import { useClubStore } from '@/store/useClubStore';
+import { useClubStore, NONE } from '@/store/useClubStore';
 import { useT, type TKey } from '@/i18n';
 import { manifestOf, tr } from '@/plugins/runtime';
 import { useUiLocale } from '@/i18n';
@@ -10,7 +10,7 @@ import { cn } from '@/lib/cn';
 
 /** Порядок и разделители пунктов в каждом меню. */
 const LAYOUT: Record<CommandGroup, (string | '-' | { label: TKey })[]> = {
-  file: ['file.templates', 'file.open', 'file.save', '-', 'file.share', '-', { label: 'menu.publish' }, 'file.exportInstall', 'file.exportUpdate', 'file.exportLocal', '-', 'file.backup', 'file.restore', '-', 'file.settings'],
+  file: ['file.templates', 'file.open', 'file.save', '-', 'file.share', '-', { label: 'menu.publish' }, 'file.exportInstall', 'file.exportUpdate', 'file.exportLocal', 'file.hub', '-', 'file.backup', 'file.restore', '-', 'file.settings'],
   edit: ['edit.undo', 'edit.redo', '-', 'edit.newModule', 'edit.deleteModule', '-', 'edit.commands'],
   view: ['view.portal', 'view.diagram', 'view.json', '-', { label: 'menu.preview' }, 'view.desktop', 'view.tablet', 'view.mobile', '-', { label: 'menu.mode' }, 'view.easy', 'view.advanced', 'view.pro', '-', { label: 'menu.theme' }, 'view.light', 'view.dark', 'view.system', '-', 'view.language'],
   data: ['data.editor', '-', 'data.import', 'data.newFromSheet'],
@@ -44,7 +44,7 @@ function Item({ command }: { command: Command }) {
 export function MenuBar({ commands }: { commands: Command[] }) {
   const t = useT();
   const locale = useUiLocale();
-  const plugins = useClubStore((s) => s.schema.plugins ?? []);
+  const plugins = useClubStore((s) => s.schema.plugins ?? NONE);
   const byId = new Map(commands.map((c) => [c.id, c]));
 
   return (

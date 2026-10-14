@@ -132,6 +132,8 @@ export function TemplateGallery() {
 }
 
 const WIDGETS: { id: DashboardWidget; label: TKey }[] = [
+  { id: 'attention', label: 'dashboard.attention' },
+  { id: 'balances', label: 'dashboard.balances' },
   { id: 'stats', label: 'dashboard.stats' },
   { id: 'upcoming', label: 'dashboard.upcoming' },
   { id: 'statuses', label: 'dashboard.statuses' },

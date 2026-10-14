@@ -14,6 +14,8 @@ function facetField(def, app) {
       return new SelectField(Object.assign(base, { values: def.values || [], maxSelect: def.maxSelect || 1 }));
     case "file":
       return new FileField(Object.assign(base, { maxSelect: def.maxSelect || 1, maxSize: 10485760, thumbs: ["480x270"] }));
+    case "bool":
+      return new BoolField(base);
     case "relation":
       return new RelationField(Object.assign(base, {
         collectionId: app.findCollectionByNameOrId(def.target).id,
@@ -30,11 +32,13 @@ function facetApply(app, ops) {
     var op = ops[i];
     switch (op.op) {
       case "createCollection": {
+        // Правила доступа приходят отдельной операцией setRules в конце миграции.
+        // Без неё (миграции старых версий) — прежняя модель: чтение публичное.
         var c = new Collection({
-          type: "base",
+          type: op.auth ? "auth" : "base",
           name: op.name,
-          listRule: "",
-          viewRule: "",
+          listRule: op.auth ? null : "",
+          viewRule: op.auth ? null : "",
           createRule: null,
           updateRule: null,
           deleteRule: null,
@@ -79,6 +83,39 @@ function facetApply(app, ops) {
         if (op.patch.values !== undefined) f.values = op.patch.values;
         if (op.patch.maxSelect !== undefined) f.maxSelect = op.patch.maxSelect;
         app.save(uc);
+        break;
+      }
+      case "setRules": {
+        var sc = col(op.collection);
+        sc.listRule = op.rules.listRule;
+        sc.viewRule = op.rules.viewRule;
+        sc.createRule = op.rules.createRule;
+        sc.updateRule = op.rules.updateRule;
+        sc.deleteRule = op.rules.deleteRule;
+        app.save(sc);
+        break;
+      }
+      case "bootstrapStaff": {
+        // В хабе вуза председатель — отдельная учётная запись, не суперпользователь сервера.
+        var email = $os.getenv("FACET_CHAIR_EMAIL") || $os.getenv("PB_ADMIN_EMAIL");
+        var password = $os.getenv("FACET_CHAIR_PASSWORD") || $os.getenv("PB_ADMIN_PASSWORD");
+        var staff = col(op.collection);
+        if (!email || !password) {
+          console.log("[facet] PB_ADMIN_EMAIL / PB_ADMIN_PASSWORD не заданы — первая учётная запись актива не создана");
+          break;
+        }
+        try {
+          app.findAuthRecordByEmail(op.collection, email);
+          break; // уже есть
+        } catch (_) {}
+        var chair = new Record(staff);
+        chair.setEmail(email);
+        chair.setPassword(password);
+        chair.setVerified(true);
+        chair.set("name", $os.getenv("FACET_CHAIR_NAME") || "Председатель");
+        chair.set("role", op.role);
+        app.save(chair);
+        console.log("[facet] учётная запись председателя: " + email);
         break;
       }
       case "seed":

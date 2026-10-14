@@ -125,7 +125,7 @@ async function checkStructure(s: Server, schema: ClubSchema) {
     const extra = col.fields.filter((f: any) => !f.system && !['id', 'created', 'updated'].includes(f.name) && !pc.fields.some((pf) => pf.name === f.name));
     check(!extra.length, `  ${pc.name}: нет лишних полей${extra.length ? ` (${extra.map((f: any) => f.name).join(', ')})` : ''}`);
   }
-  const stale = cols.filter((c) => !c.system && c.name !== 'users' && !schema.entities.some((e) => e.id === c.name));
+  const stale = cols.filter((c) => !c.system && !['users', 'staff'].includes(c.name) && !c.name.startsWith('reg_') && !schema.entities.some((e) => e.id === c.name));
   check(!stale.length, `нет лишних коллекций${stale.length ? ` (${stale.map((c) => c.name).join(', ')})` : ''}`);
 }
 
@@ -167,7 +167,7 @@ async function presets() {
       check(settings.meta?.appName === 'Smoke Club', 'хук применил имя клуба');
       check(settings.trustedProxy?.headers?.includes('X-Real-IP'), 'хук доверяет X-Real-IP от Nginx');
       const index = await fetch(`${s.url}/`).then((r) => r.text());
-      check(index.includes('/portal.js'), 'портал отдаётся');
+      check(index.includes('src="portal.js"'), 'портал отдаётся');
       check((await fetch(`${s.url}/portal.js`)).ok, 'portal.js отдаётся');
       if (preset === 'general') {
         const members = await list(s, 'members');
@@ -383,11 +383,181 @@ async function dataEditor() {
   }
 }
 
+async function asUser(s: Server, collection: string, email: string, password: string): Promise<Server> {
+  const res = await fetch(`${s.url}/api/collections/${collection}/auth-with-password`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ identity: email, password }),
+  }).then((r) => r.json() as Promise<{ token?: string; message?: string }>);
+  if (!res.token) throw new Error(`вход ${email}: ${res.message}`);
+  return { ...s, token: res.token };
+}
+
+async function applyUpdate(root: string, data: string, base: ClubSchema, next: ClubSchema, name: string) {
+  const bundle = await buildUpdateBundle({ schema: base, raw: generateSchemaJson(base), source: 'file', at: '' }, next, {});
+  const updateRoot = writeBundle(bundle, path.join(WORK, name));
+  const dir = path.join(updateRoot, 'payload/pocketbase/pb_migrations');
+  for (const f of fs.readdirSync(dir)) fs.copyFileSync(path.join(dir, f), path.join(root, 'pocketbase/pb_migrations', f));
+  fs.copyFileSync(path.join(updateRoot, 'payload/club-schema.json'), path.join(root, 'club-schema.json'));
+  migrate(root, data);
+  return bundle;
+}
+
+async function roles() {
+  console.log('\n▶ Роли актива и доступ по логину');
+  // Система старой версии: без ролей, всё публично на чтение.
+  const legacy = normalizeSchema({ ...buildPresetSchema('general'), editorMode: 'pro' });
+  const { root, data } = install(await buildInstallBundle(legacy, {}, { password: PASSWORD }), 'roles');
+  let s = await serve(root, data);
+  const adminEmail = env(root).PB_ADMIN_EMAIL!;
+  await api(s, 'POST', '/api/collections/events/records', { title: 'Кикофф', starts_at: '2026-10-20 18:00:00.000Z', status: 'Запланировано' });
+  check((await api<{ items: unknown[] }>(s, 'GET', '/api/collections/events/records', undefined, true)).data.items.length === 1, 'до обновления: аноним читает');
+  s.proc.kill();
+
+  // Обновление до модели с ролями — теми же действиями, что в редакторе.
+  useClubStore.getState().replaceSchema(legacy);
+  const a = useClubStore.getState();
+  a.setRoleAccess('organizer', 'events', 'write');
+  a.setRoleAccess('treasurer', 'inventory', 'none');
+  const next = useClubStore.getState().schema;
+  check(next.roles?.some((r) => r.id === 'chair'), 'в рабочей схеме появились роли');
+  let bundle;
+  try {
+    bundle = await applyUpdate(root, data, legacy, next, 'roles-update');
+    check(true, 'миграция с ролями применилась');
+  } catch (err) {
+    check(false, `миграция с ролями упала: ${(err as { stderr?: Buffer }).stderr?.toString() ?? err}`);
+    return;
+  }
+  const kinds = bundle.diff.changes.map((c) => c.kind);
+  check(kinds.includes('staff-enabled') && kinds.filter((k) => k === 'access-private').length === next.entities.length, `diff: вход для актива и закрытие разделов (${kinds.join(', ')})`);
+
+  s = await serve(root, data);
+  try {
+    await checkStructure(s, next);
+    const anon = await api<{ items: unknown[] }>(s, 'GET', '/api/collections/events/records', undefined, true);
+    check(anon.status !== 200 || anon.data.items.length === 0, 'после обновления: аноним не видит записи');
+    const chair = await asUser(s, 'staff', adminEmail, PASSWORD);
+    check(true, 'председатель входит с данными администратора из .env');
+    const me = (await api<{ items: any[] }>(chair, 'GET', '/api/collections/staff/records')).data.items;
+    check(me.length === 1 && me[0].role === 'chair', 'учётная запись председателя создана');
+    check((await api<{ items: unknown[] }>(chair, 'GET', '/api/collections/events/records')).data.items.length === 1, 'председатель читает разделы');
+
+    const mk = async (email: string, role: string) =>
+      api(chair, 'POST', '/api/collections/staff/records', { email, password: 'staff-pass-123', passwordConfirm: 'staff-pass-123', name: email, role });
+    const mkRes = await mk('kazna@club.test', 'treasurer');
+    check(mkRes.status === 200, `председатель добавляет казначея ${mkRes.status === 200 ? '' : JSON.stringify(mkRes.data)}`);
+    check((await mk('org@club.test', 'organizer')).status === 200, 'председатель добавляет организатора');
+    const treasurer = await asUser(s, 'staff', 'kazna@club.test', 'staff-pass-123');
+    const organizer = await asUser(s, 'staff', 'org@club.test', 'staff-pass-123');
+
+    check((await api<{ items: unknown[] }>(treasurer, 'GET', '/api/collections/events/records')).data.items.length === 1, 'казначей видит мероприятия (просмотр)');
+    check((await api(treasurer, 'POST', '/api/collections/events/records', { title: 'X', starts_at: '2026-10-21 18:00:00.000Z', status: 'Запланировано' })).status >= 400, 'казначей не может создавать мероприятия');
+    const inv = await api<{ items: unknown[] }>(treasurer, 'GET', '/api/collections/inventory/records');
+    check(inv.status !== 200 || inv.data.items.length === 0, 'казначею закрыт инвентарь');
+    const created = await api<any>(organizer, 'POST', '/api/collections/events/records', { title: 'Квиз', starts_at: '2026-10-22 18:00:00.000Z', status: 'Запланировано' });
+    check(created.status === 200, 'организатор создаёт мероприятия');
+    check((await api(organizer, 'POST', '/api/collections/staff/records', { email: 'x@club.test', password: 'staff-pass-123', passwordConfirm: 'staff-pass-123', role: 'chair' })).status >= 400, 'организатор не может добавлять сотрудников');
+    const tId = (await api<{ items: any[] }>(treasurer, 'GET', '/api/collections/staff/records')).data.items.find((x) => x.email === 'kazna@club.test' || x.name === 'kazna@club.test')?.id;
+    check((await api(treasurer, 'PATCH', `/api/collections/staff/records/${tId}`, { role: 'chair' })).status >= 400, 'сотрудник не может сам повысить себе роль');
+    check((await api(treasurer, 'PATCH', `/api/collections/staff/records/${tId}`, { name: 'Казначей Катя' })).status === 200, 'сотрудник меняет своё имя');
+  } finally {
+    s.proc.kill();
+  }
+
+  // Публичный раздел (афиша) — виден без входа.
+  useClubStore.getState().setEntityPublic('events', true);
+  const pub = useClubStore.getState().schema;
+  const b2 = await applyUpdate(root, data, next, pub, 'roles-public');
+  check(b2.diff.changes.some((c) => c.kind === 'access-public' && c.collection === 'events'), 'diff: раздел стал публичным');
+  s = await serve(root, data);
+  try {
+    check((await api<{ items: unknown[] }>(s, 'GET', '/api/collections/events/records', undefined, true)).data.items.length === 2, 'аноним видит публичный раздел');
+    check((await api(s, 'POST', '/api/collections/events/records', { title: 'Y' }, true)).status >= 400, 'но не может в него писать');
+  } finally {
+    s.proc.kill();
+  }
+
+  // Новая установка с ролями сразу.
+  const fresh = useClubStore.getState().schema;
+  const f = install(await buildInstallBundle(fresh, {}, { password: PASSWORD }), 'roles-fresh');
+  s = await serve(f.root, f.data);
+  try {
+    await checkStructure(s, fresh);
+    await asUser(s, 'staff', env(f.root).PB_ADMIN_EMAIL!, PASSWORD);
+    check(true, 'новая установка: председатель входит');
+  } catch (err) {
+    check(false, `новая установка с ролями: ${err}`);
+  } finally {
+    s.proc.kill();
+  }
+}
+
+async function accounting() {
+  console.log('\n▶ Учёт: операции и остатки');
+  useClubStore.getState().replaceSchema(normalizeSchema({ ...buildPresetSchema('general'), editorMode: 'pro' }));
+  useClubStore.getState().clearSeeds();
+  useClubStore.getState().addAccountingPack('cash');
+  useClubStore.getState().addAccountingPack('equipment');
+  const schema = useClubStore.getState().schema;
+  check(schema.registers?.length === 2 && schema.entities.some((e) => e.id === 'cash_ops') && schema.entities.some((e) => e.id === 'issues'), 'готовые решения: касса и выдача инвентаря');
+  check(!schema.entities.some((e) => e.id === 'inventory_2' || e.id === 'members_2'), 'выдача использует существующие разделы инвентаря и участников');
+  const seeds = { cash_ops: seedBatch('cash_ops', [{ title: 'Взносы сентябрь', date: '01.09.2026', type: 'Поступление', amount: '5 000', article: 'Взносы' }]) };
+  const bundle = await buildInstallBundle(schema, seeds, { password: PASSWORD });
+  check(bundle.files.some((f) => f.path.endsWith('pb_hooks/facet-registers.pb.js')), 'хук проведения в архиве');
+  const { root, data } = install(bundle, 'accounting');
+  const s = await serve(root, data);
+  const sum = async (reg: string, res: string, filter = '') => {
+    const rows = (await api<{ items: any[] }>(s, 'GET', `/api/collections/reg_${reg}/records?perPage=500${filter ? `&filter=${encodeURIComponent(filter)}` : ''}`)).data.items;
+    return rows.reduce((n, r) => n + (r[`r_${res}`] ?? 0), 0);
+  };
+  try {
+    await checkStructure(s, schema);
+    const seededOps = (await api<{ items: any[] }>(s, 'GET', '/api/collections/cash_ops/records')).data.items;
+    check(await sum('cash', 'amount') === 5000, `черновые операции проведены при установке: ${await sum('cash', 'amount')} (операций ${seededOps.length}, posted=${seededOps[0]?.posted})`);
+    if (await sum('cash', 'amount') !== 5000) console.log(s.log().split('\n').filter((l) => /facet|rror/i.test(l)).slice(0, 15).join('\n'));
+    const exp = await api<any>(s, 'POST', '/api/collections/cash_ops/records', { title: 'Пицца', date: '2026-09-05 12:00:00.000Z', type: 'Расход', amount: 1200, article: 'Мероприятия', posted: true });
+    check(exp.status === 200, 'расход проведён');
+    check(await sum('cash', 'amount') === 3800, `остаток кассы 3800: ${await sum('cash', 'amount')}`);
+    check(await sum('cash', 'amount', 'd_article = "Мероприятия"') === -1200, 'остаток по статье');
+    const draft = await api<any>(s, 'POST', '/api/collections/cash_ops/records', { title: 'Черновик', date: '2026-09-06 12:00:00.000Z', type: 'Расход', amount: 999, article: 'Прочее', posted: false });
+    check(draft.status === 200 && await sum('cash', 'amount') === 3800, 'неподтверждённая операция не влияет на остаток');
+    await api(s, 'PATCH', `/api/collections/cash_ops/records/${draft.data.id}`, { posted: true });
+    check(await sum('cash', 'amount') === 2801, 'подтверждение проводит операцию');
+    await api(s, 'PATCH', `/api/collections/cash_ops/records/${draft.data.id}`, { amount: 1 });
+    check(await sum('cash', 'amount') === 3799, 'изменение суммы перепроводит');
+    await api(s, 'DELETE', `/api/collections/cash_ops/records/${draft.data.id}`);
+    check(await sum('cash', 'amount') === 3800, 'удаление снимает движения');
+
+    const item = (await api<any>(s, 'POST', '/api/collections/inventory/records', { item: 'Проектор', quantity: 2, state: 'Доступно' })).data;
+    const anya = (await api<any>(s, 'POST', '/api/collections/members/records', { full_name: 'Аня', role: 'Президент' })).data;
+    const issue = await api<any>(s, 'POST', '/api/collections/issues/records', { date: '2026-09-10 10:00:00.000Z', type: 'Выдача', item: item.id, holder: anya.id, qty: 2, posted: true });
+    check(issue.status === 200, 'выдача проведена');
+    check(await sum('on_hand', 'qty', `d_holder = "${anya.id}"`) === 2, 'у Ани на руках 2');
+    const tooMuch = await api<any>(s, 'POST', '/api/collections/issues/records', { date: '2026-09-11 10:00:00.000Z', type: 'Возврат', item: item.id, holder: anya.id, qty: 3, posted: true });
+    check(tooMuch.status === 400 && /Недостаточно/.test(tooMuch.data?.message ?? ''), `вернуть больше, чем выдано, нельзя: ${tooMuch.data?.message}`);
+    const ret = await api<any>(s, 'POST', '/api/collections/issues/records', { date: '2026-09-12 10:00:00.000Z', type: 'Возврат', item: item.id, holder: anya.id, qty: 2, posted: true });
+    check(ret.status === 200 && await sum('on_hand', 'qty') === 0, 'возврат обнулил остаток');
+    const shrink = await api<any>(s, 'PATCH', `/api/collections/issues/records/${issue.data.id}`, { qty: 1 });
+    check(shrink.status === 400, 'нельзя уменьшить выдачу, если возврат уже больше');
+    const del = await api<any>(s, 'DELETE', `/api/collections/issues/records/${issue.data.id}`);
+    check(del.status === 400, 'нельзя удалить выдачу, по которой уже был возврат');
+    const anon = await api<{ items: unknown[] }>(s, 'GET', '/api/collections/reg_cash/records', undefined, true);
+    check(anon.status !== 200 || anon.data.items.length === 0, 'остатки закрыты для гостей');
+    const writeReg = await api<any>(s, 'POST', '/api/collections/reg_cash/records', { r_amount: 1 }, true);
+    check(writeReg.status >= 400, 'движения нельзя записать напрямую');
+  } finally {
+    s.proc.kill();
+  }
+}
+
 try {
   await presets();
   await update();
   await plugins();
   await dataEditor();
+  await roles();
+  await accounting();
 } catch (err) {
   failures++;
   console.error(err);

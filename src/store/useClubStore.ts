@@ -3,11 +3,16 @@ import { persist } from 'zustand/middleware';
 import { temporal, type TemporalState } from 'zundo';
 import { buildPresetSchema } from '@/data/presets';
 import { normalizeSchema, normalizeView } from '@/utils/normalize';
+import { withRoles, CHAIR_ROLE } from '@/utils/access';
+import { buildAccountingPack, type AccountingPackId } from '@/data/accounting';
 import type { InstalledPlugin, PluginManifest } from '@/plugins/types';
 import { BUILTIN_BY_ID } from '@/plugins/catalog';
 import { defaultSettings, manifestOf } from '@/plugins/runtime';
 import type {
+  AccessLevel,
   ClubEntity,
+  ClubRegister,
+  ClubRole,
   ClubSchema,
   DashboardConfig,
   EditorMode,
@@ -72,6 +77,20 @@ export interface ClubState {
   loadPreset: (preset: PresetId) => void;
   replaceSchema: (schema: ClubSchema) => void;
 
+  /** Роли актива. */
+  addRole: (role: ClubRole) => void;
+  updateRole: (id: string, patch: Partial<Omit<ClubRole, 'id'>>) => void;
+  removeRole: (id: string) => void;
+  setRoleAccess: (roleId: string, entityId: string, level: AccessLevel) => void;
+  setEntityPublic: (entityId: string, isPublic: boolean) => void;
+
+  /** Учёт: регистры остатков и операции. */
+  addAccountingPack: (pack: AccountingPackId) => void;
+  addRegister: (register: ClubRegister) => void;
+  updateRegister: (id: string, patch: Partial<ClubRegister>) => void;
+  removeRegister: (id: string) => void;
+  renameRegisterId: (id: string, nextId: string) => void;
+
   installPlugin: (idOrManifest: string | PluginManifest) => void;
   setPluginEnabled: (id: string, enabled: boolean) => void;
   setPluginSettings: (id: string, patch: InstalledPlugin['settings']) => void;
@@ -85,7 +104,7 @@ export interface ClubState {
   clearSeeds: (entityId?: string) => void;
 }
 
-const initialSchema = (): ClubSchema => normalizeSchema({ ...buildPresetSchema('general'), editorMode: 'easy' });
+const initialSchema = (): ClubSchema => withRoles(normalizeSchema({ ...buildPresetSchema('general'), editorMode: 'easy' }));
 
 const mapEntity = (
   schema: ClubSchema,
@@ -164,12 +183,19 @@ export const useClubStore = create<ClubState>()(
                   ...e,
                   relations: e.relations.filter((r) => r.targetEntityId !== id),
                   fields: e.fields.filter((fld) => !(fld.type === 'relation' && fld.targetEntityId === id)),
+                  ...(e.basedOn?.some((b) => b.from === id) ? { basedOn: e.basedOn.filter((b) => b.from !== id) } : {}),
                 }),
               );
             const seeds = { ...s.seeds };
             delete seeds[id];
+            const roles = s.schema.roles?.map((r) => {
+              if (!r.access || !(id in r.access)) return r;
+              const access = { ...r.access };
+              delete access[id];
+              return { ...r, access };
+            });
             return {
-              schema: { ...s.schema, entities },
+              schema: { ...s.schema, entities, roles },
               seeds,
               activeEntityId: s.activeEntityId === id ? (entities[0]?.id ?? null) : s.activeEntityId,
             };
@@ -193,14 +219,25 @@ export const useClubStore = create<ClubState>()(
               ...(e.id === id ? { id: nextId, uid: e.uid ?? e.id } : {}),
               relations: e.relations.map((r) => (r.targetEntityId === id ? { ...r, targetEntityId: nextId } : r)),
               fields: e.fields.map((f) => (f.targetEntityId === id ? { ...f, targetEntityId: nextId } : f)),
+              ...(e.basedOn?.some((b) => b.from === id) ? { basedOn: e.basedOn.map((b) => (b.from === id ? { ...b, from: nextId } : b)) } : {}),
             }));
             const seeds = { ...s.seeds };
             if (seeds[id]) {
               seeds[nextId] = { ...seeds[id], entityId: nextId };
               delete seeds[id];
             }
+            const roles = s.schema.roles?.map((r) => {
+              if (!r.access || !(id in r.access)) return r;
+              const access = { ...r.access, [nextId]: r.access[id] };
+              delete access[id];
+              return { ...r, access };
+            });
+            const registers = s.schema.registers?.map((r) => ({
+              ...r,
+              dimensions: r.dimensions.map((d) => (d.target === id ? { ...d, target: nextId } : d)),
+            }));
             return {
-              schema: { ...s.schema, entities },
+              schema: { ...s.schema, entities, roles, registers },
               seeds,
               activeEntityId: s.activeEntityId === id ? nextId : s.activeEntityId,
             };
@@ -274,18 +311,84 @@ export const useClubStore = create<ClubState>()(
 
         loadPreset: (preset) =>
           set((s) => {
-            const next = normalizeSchema({ ...buildPresetSchema(preset), editorMode: s.schema.editorMode, locale: s.schema.locale });
+            const next = withRoles(normalizeSchema({ ...buildPresetSchema(preset), editorMode: s.schema.editorMode, locale: s.schema.locale }));
             return { schema: next, seeds: {}, activeEntityId: next.entities[0]?.id ?? null };
           }),
 
         replaceSchema: (schema) =>
           set((s) => {
-            const next = normalizeSchema(schema);
+            const next = withRoles(normalizeSchema(schema));
             const ids = new Set(next.entities.map((e) => e.id));
             const seeds = Object.fromEntries(Object.entries(s.seeds).filter(([id]) => ids.has(id)));
             const keepActive = s.activeEntityId && ids.has(s.activeEntityId);
             return { schema: next, seeds, activeEntityId: keepActive ? s.activeEntityId : (next.entities[0]?.id ?? null) };
           }),
+
+        addRole: (role) =>
+          set((s) => ({ schema: { ...s.schema, roles: [...(s.schema.roles ?? []), role] } })),
+
+        updateRole: (id, patch) =>
+          set((s) => ({ schema: { ...s.schema, roles: s.schema.roles?.map((r) => (r.id === id ? { ...r, ...patch, id } : r)) } })),
+
+        removeRole: (id) =>
+          set((s) => (id === CHAIR_ROLE ? s : { schema: { ...s.schema, roles: s.schema.roles?.filter((r) => r.id !== id) } })),
+
+        setRoleAccess: (roleId, entityId, level) =>
+          set((s) => ({
+            schema: {
+              ...s.schema,
+              roles: s.schema.roles?.map((r) => {
+                if (r.id !== roleId || r.id === CHAIR_ROLE) return r;
+                const access = { ...r.access };
+                if (level === r.default) delete access[entityId];
+                else access[entityId] = level;
+                return { ...r, access };
+              }),
+            },
+          })),
+
+        addAccountingPack: (pack) =>
+          set((s) => {
+            const { entities, registers } = buildAccountingPack(s.schema, pack);
+            return {
+              schema: {
+                ...s.schema,
+                entities: [...s.schema.entities, ...entities.map(withView)],
+                registers: [...(s.schema.registers ?? []), ...registers],
+              },
+              activeEntityId: entities[entities.length - 1]?.id ?? s.activeEntityId,
+            };
+          }),
+
+        addRegister: (register) =>
+          set((s) => ({ schema: { ...s.schema, registers: [...(s.schema.registers ?? []), register] } })),
+
+        updateRegister: (id, patch) =>
+          set((s) => ({ schema: { ...s.schema, registers: s.schema.registers?.map((r) => (r.id === id ? { ...r, ...patch, id: r.id, uid: r.uid } : r)) } })),
+
+        removeRegister: (id) =>
+          set((s) => ({
+            schema: {
+              ...s.schema,
+              registers: s.schema.registers?.filter((r) => r.id !== id),
+              entities: s.schema.entities.map((e) => (e.postings?.some((p) => p.register === id) ? { ...e, postings: e.postings.filter((p) => p.register !== id) } : e)),
+            },
+          })),
+
+        renameRegisterId: (id, nextId) =>
+          set((s) => {
+            if (id === nextId || s.schema.registers?.some((r) => r.id === nextId)) return s;
+            return {
+              schema: {
+                ...s.schema,
+                registers: s.schema.registers?.map((r) => (r.id === id ? { ...r, id: nextId, uid: r.uid ?? r.id } : r)),
+                entities: s.schema.entities.map((e) => (e.postings?.some((p) => p.register === id) ? { ...e, postings: e.postings.map((p) => (p.register === id ? { ...p, register: nextId } : p)) } : e)),
+              },
+            };
+          }),
+
+        setEntityPublic: (entityId, isPublic) =>
+          set((s) => ({ schema: mapEntity(s.schema, entityId, (e) => ({ ...e, public: isPublic || undefined })) })),
 
         installPlugin: (idOrManifest) =>
           set((s) => {
@@ -385,7 +488,7 @@ export const useClubStore = create<ClubState>()(
         return {
           ...current,
           ...p,
-          schema: p.schema ? normalizeSchema(p.schema) : current.schema,
+          schema: p.schema ? withRoles(normalizeSchema(p.schema)) : current.schema,
           baseline: p.baseline ? { ...p.baseline, schema: normalizeSchema(p.baseline.schema) } : null,
           seeds: p.seeds ?? {},
           pluginSecrets: p.pluginSecrets ?? {},
@@ -401,3 +504,6 @@ type HistoryState = TemporalState<Pick<ClubState, 'schema'>>;
 export function useHistory<T>(selector: (state: HistoryState) => T): T {
   return useStore(useClubStore.temporal, selector);
 }
+
+/** Стабильный пустой список для селекторов (новый [] в селекторе zustand вызывает бесконечный цикл). */
+export const NONE: never[] = [];

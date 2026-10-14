@@ -19,6 +19,7 @@ import { generateSchemaJson } from '@/utils/schemaJson';
 import { resolveRelations } from '@/utils/relations';
 import { cssVarsToText, dividerCss, fontStylesheetUrl, themeToCssVars } from '@/utils/theme';
 import { planMigration, renderMigrationFile } from '@/utils/migrations/generate';
+import { registerHookFiles } from '@/utils/registers';
 import { buildSeedOp, orderSeedOps } from '@/utils/migrations/seeds';
 import { describeChange, SEVERITY_MARK } from '@/utils/migrations/describe';
 import type { SchemaDiff } from '@/utils/migrations/diff';
@@ -242,12 +243,12 @@ export function generatePortalHtml(schema: ClubSchema): string {
     <meta name="description" content="${esc(schema.motto)}" />
     <meta name="theme-color" content="${schema.theme.colors.primary}" />
     <title>${esc(schema.clubName)}</title>
-${logo ? `    <link rel="icon" href="/${logo.path}" />\n` : ''}${font ? `    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n    <link rel="stylesheet" href="${font}" />\n` : ''}    <link rel="stylesheet" href="/portal.css" />
+${logo ? `    <link rel="icon" href="${logo.path}" />\n` : ''}${font ? `    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n    <link rel="stylesheet" href="${font}" />\n` : ''}    <link rel="stylesheet" href="portal.css" />
   </head>
   <body>
-    <div id="app"${logo ? ` data-logo="/${logo.path}"` : ''}><div class="fx-root"><div class="fx-shell"><div class="fx-empty">…</div></div></div></div>
-    <script src="/portal.js" defer></script>
-${pluginScripts(schema).map((src) => `    <script src="${src}" defer></script>\n`).join('')}  </body>
+    <div id="app"${logo ? ` data-logo="${logo.path}"` : ''}><div class="fx-root"><div class="fx-shell"><div class="fx-empty">…</div></div></div></div>
+    <script src="portal.js" defer></script>
+${pluginScripts(schema).map((src) => `    <script src="${src.replace(/^\//, '')}" defer></script>\n`).join('')}  </body>
 </html>
 `;
 }
@@ -321,7 +322,15 @@ sudo ./install.sh club.example.ru     # или без домена: sudo ./insta
 | --- | --- | --- | --- |
 ${entityList}
 
-Записи добавляются и меняются в панели управления \`/_/\`. На портале у каждой записи есть кнопка «Изменить», которая открывает её в панели.
+${schema.roles?.length ? `## Рабочее место актива
+
+Откройте адрес портала и войдите председателем: **email и пароль администратора из \`.env\`**. На странице «Сотрудники» председатель добавляет остальных и назначает роли:
+
+${schema.roles.map((r) => `- **${r.name}**${r.id === 'chair' ? ' — видит и меняет всё, управляет составом' : r.manageStaff ? ' — управляет составом' : ''}`).join('\n')}
+
+Каждый сотрудник видит только разделы своей роли и добавляет или меняет записи там, где у роли есть право изменения.${schema.entities.some((e) => e.public) ? ` Без входа открыты: ${schema.entities.filter((e) => e.public).map((e) => `«${e.pluralName}»`).join(', ')}.` : ' Без входа разделы не видны.'}
+
+Панель PocketBase \`/_/\` остаётся для администратора: резервные копии, настройки, ручная правка любых данных.` : 'Записи добавляются и меняются в панели управления \`/_/\`. На портале у каждой записи есть кнопка «Изменить», которая открывает её в панели.'}
 
 ## Резервные копии
 
@@ -345,8 +354,9 @@ ${entityList}
 
 ## Безопасность
 
-- Чтение записей открыто всем, кто знает адрес портала; изменение — только администраторам.
-  Ограничить просмотр можно в \`/_/\` → *Collections → ⚙ → API Rules* (например, \`@request.auth.id != ""\`).
+${schema.roles?.length
+  ? '- Доступ к разделам определяют роли актива (настраиваются в Facet OS → «Роли и доступ» и применяются обновлением).'
+  : '- Чтение записей открыто всем, кто знает адрес портала; изменение — только администраторам.\n  Ограничить просмотр можно в \`/_/\` → *Collections → ⚙ → API Rules* (например, \`@request.auth.id != ""\`).'}
 - Вход в панель ограничен 10 попытками в минуту с одного IP; API — 30 запросами в секунду.
 - Поменяйте пароль администратора после первого входа: \`/_/\` → *System → Superusers*.
 - Добавить ещё администратора — там же, кнопка *New*.
@@ -439,6 +449,7 @@ function sharedFiles(schema: ClubSchema): ExportFile[] {
   const logo = logoFile(schema);
   if (logo) files.push({ path: `web/${logo.path}`, content: logo.base64, encoding: 'base64', description: 'Логотип клуба' });
   files.push(...pluginFiles(schema));
+  files.push(...registerHookFiles(schema));
   return files;
 }
 

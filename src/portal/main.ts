@@ -3,6 +3,7 @@ import type { ClubSchema } from '@/types/schema';
 import { normalizeSchema } from '@/utils/normalize';
 import { hashRouter, mountPortal } from './app';
 import { pocketbaseSource } from './sources/pocketbase';
+import { pocketbaseSession } from './session';
 import { esc } from './render';
 
 type RenderInfo = { path: string; entityId: string | null; recordId: string | null; root: HTMLElement };
@@ -29,8 +30,10 @@ window.FacetPortal = {
 };
 
 const root = document.getElementById('app')!;
+// Портал может жить не в корне сайта (хаб вуза: /c/<клуб>/) — адреса API и файлов считаем от страницы.
+const base = location.pathname.replace(/\/[^/]*$/, '');
 
-fetch('/club-schema.json', { cache: 'no-cache' })
+fetch(`${base}/club-schema.json`, { cache: 'no-cache' })
   .then((res) => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json() as Promise<ClubSchema>;
@@ -40,9 +43,11 @@ fetch('/club-schema.json', { cache: 'no-cache' })
     window.FacetPortal!.schema = schema;
     document.title = schema.clubName;
     document.documentElement.lang = schema.locale ?? 'ru';
+    const session = pocketbaseSession(base);
     mountPortal(root, {
       schema,
-      source: pocketbaseSource(),
+      session,
+      source: pocketbaseSource(base, session.token),
       router: hashRouter(),
       assets: { logoUrl: root.dataset.logo || undefined },
       onRender: (info) => renderListeners.forEach((cb) => {

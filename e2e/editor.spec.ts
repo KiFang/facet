@@ -254,3 +254,175 @@ test('редактор данных: вставка из Excel, правка и 
   await page.bringToFront();
   await expect(preview(page).getByText('Оля Тестова').first()).toBeVisible();
 });
+
+test('рабочее место в превью: роли, форма записи, сотрудники', async ({ page }) => {
+  const pv = preview(page);
+  // Председатель: создаёт запись через форму, обязательные поля проверяются.
+  await pv.locator('[data-nav="/members"]').first().click();
+  await pv.getByTestId('fx-add').click();
+  await pv.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(pv.locator('.fx-field-error')).toHaveCount(2);
+  await pv.locator('input[name=full_name]').fill('Новый Участник');
+  await pv.locator('select[name=role]').selectOption({ index: 1 });
+  await pv.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(pv.locator('.fx-detail h2')).toHaveText('Новый Участник');
+  await pv.getByTestId('fx-edit').click();
+  await pv.locator('input[name=faculty]').fill('ФКН');
+  await pv.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(pv.locator('.fx-detail')).toContainText('ФКН');
+
+  // Казначей: инвентарь только просмотр — кнопки «Добавить» нет.
+  await page.getByTestId('preview-view-as').selectOption('treasurer');
+  await pv.locator('[data-nav="/inventory"]').first().click();
+  await expect(pv.locator('.fx-toolbar h2')).toContainText('Инвентарь');
+  await expect(pv.getByTestId('fx-add')).toHaveCount(0);
+  await expect(pv.locator('[data-nav="/staff"]')).toHaveCount(0);
+
+  // Права из конфигуратора сразу действуют: даём казначею изменение инвентаря.
+  await page.getByTestId('nav-roles').click();
+  await page.getByTestId('access-inventory').locator('[data-level]').nth(1).click();
+  await expect(pv.getByTestId('fx-add')).toBeVisible();
+
+  // Гость видит только вход.
+  await page.getByTestId('preview-view-as').selectOption('');
+  await expect(pv.locator('form[data-login]')).toBeVisible();
+
+  // Председатель управляет составом.
+  await page.getByTestId('preview-view-as').selectOption('chair');
+  await pv.locator('[data-nav="/staff"]').first().click();
+  await expect(pv.locator('[data-staff-row]')).toHaveCount(4);
+  await pv.locator('#fx-staff-name').fill('Катя');
+  await pv.locator('#fx-staff-email').fill('katya@club.test');
+  await pv.locator('#fx-staff-password').fill('katya-pass-123');
+  await pv.locator('form[data-staff-form] button[type=submit]').click();
+  await expect(pv.locator('[data-staff-row]')).toHaveCount(5);
+});
+
+test('учёт: касса и выдача инвентаря, остатки и подтверждение', async ({ page }, info) => {
+  await page.getByTestId('nav-add-accounting').click();
+  await page.getByTestId('pack-cash').click();
+  await expect(page.getByTestId('nav-register-cash')).toBeVisible();
+  await page.getByTestId('nav-add-accounting').click();
+  await page.getByTestId('pack-equipment').click();
+  await expect(page.getByTestId('nav-register-on_hand')).toBeVisible();
+  await expect(page.getByText('Схема в порядке')).toBeVisible();
+
+  const pv = preview(page);
+  // Новая операция: приход 1000 по статье «Взносы» — сразу в остатках.
+  await pv.locator('[data-nav="/balances"]').first().click();
+  const before = await pv.locator('[data-balance="cash"] tfoot .fx-num').textContent();
+  await pv.locator('[data-nav="/cash_ops"]').first().click();
+  await pv.getByTestId('fx-add').click();
+  await pv.locator('input[name=title]').fill('Взносы октябрь');
+  await pv.locator('input[name=date]').fill('2026-10-01T12:00');
+  await pv.locator('select[name=type]').selectOption('Поступление');
+  await pv.locator('input[name=amount]').fill('1000');
+  await pv.locator('select[name=article]').selectOption('Взносы');
+  await expect(pv.locator('input[name=posted]')).toBeChecked();
+  await pv.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(pv.locator('.fx-posted-badge')).toBeVisible();
+  await pv.locator('[data-nav="/balances"]').first().click();
+  const toNum = (s: string | null) => Number((s ?? '0').replace(/\s/g, '').replace(',', '.'));
+  await expect.poll(async () => toNum(await pv.locator('[data-balance="cash"] tfoot .fx-num').textContent())).toBe(toNum(before) + 1000);
+
+  // Отмена подтверждения убирает операцию из остатков.
+  await pv.locator('[data-nav="/cash_ops"]').first().click();
+  await pv.getByRole('link', { name: 'Взносы октябрь' }).click();
+  await pv.getByRole('button', { name: 'Отменить подтверждение' }).click();
+  await expect(pv.locator('.fx-draft')).toBeVisible();
+  await pv.locator('[data-nav="/balances"]').first().click();
+  await expect.poll(async () => toNum(await pv.locator('[data-balance="cash"] tfoot .fx-num').textContent())).toBe(toNum(before));
+
+  // Ввод на основании: из выдачи — «Оформить возврат» с теми же предметом и человеком.
+  await pv.locator('[data-nav="/issues"]').first().click();
+  await pv.locator('.fx-table tbody tr').first().click();
+  await pv.getByRole('button', { name: 'Оформить возврат' }).click();
+  await expect(pv.locator('select[name=type]')).toHaveValue('Возврат');
+  await expect(pv.locator('select[name=item]')).not.toHaveValue('');
+
+  // Печатная форма акта и отчёты.
+  await pv.locator('[data-nav="/issues"]').first().click();
+  await pv.locator('.fx-table tbody tr').first().click();
+  await pv.locator('[data-print-link="act"]').click();
+  await expect(pv.locator('.fx-pf-page h1')).toContainText('Акт №');
+  await expect(pv.locator('.fx-pf-table')).toBeVisible();
+  await pv.locator('[data-nav="/reports"]').first().click();
+  await expect(pv.locator('[data-report-table="turnover"]')).toBeVisible();
+  await pv.locator('[data-report-tab="summary"]').click();
+  await pv.locator('[data-report="entity"]').selectOption('cash_ops');
+  await pv.locator('[data-report="groupBy"]').selectOption('article');
+  await expect(pv.locator('[data-report-table="summary"] tbody tr').first()).toBeVisible();
+
+  // Главная: что требует внимания и итоги регистров.
+  await pv.locator('[data-nav="/"]').first().click();
+  await expect(pv.locator('.fx-attention')).toContainText('Движения денег');
+  await expect(pv.locator('[data-reg-total="cash"]')).toBeVisible();
+
+  // В архиве — хук проведения и коллекции регистров.
+  await page.keyboard.press('Control+KeyE');
+  const [d] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Скачать .zip/ }).click()]);
+  await d.saveAs(info.outputPath('accounting.zip'));
+  const { zip, names } = await zipFiles(info.outputPath('accounting.zip'));
+  expect(names.some((n) => n.endsWith('pb_hooks/facet-registers.pb.js'))).toBe(true);
+  const init = await zip.file(names.find((n) => n.endsWith('_facet_init.js'))!)!.async('string');
+  expect(init).toContain('"reg_cash"');
+  expect(init).toContain('"reg_on_hand"');
+});
+
+test('хаб вуза: подключение клуба и обновление из редактора', async ({ page }) => {
+  const HUB = 'https://clubs.uni.test';
+  const info = { hub: 'facet-hub', version: '0.3.0', name: 'Клубы университета', university: 'Северный кампус', joinMode: 'invite', universityAccess: 'reports', allowEditorUpload: true, allowDraftData: true, allowCustomPlugins: false, allowedEmailDomains: [] };
+  let joinBody: Record<string, unknown> | null = null;
+  const updates: Record<string, unknown>[] = [];
+  await page.route(`${HUB}/hub/api/**`, async (route) => {
+    const url = new URL(route.request().url());
+    const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (url.pathname === '/hub/api/info') return json(info);
+    if (url.pathname === '/hub/api/join') {
+      joinBody = route.request().postDataJSON();
+      return json({ slug: 'guild', name: 'Гильдия', status: 'active', token: 'fct_test', url: `${HUB}/c/guild/` });
+    }
+    if (url.pathname === '/hub/api/club') {
+      expect(route.request().headers().authorization).toBe('Bearer fct_test');
+      return json({ slug: 'guild', name: 'Гильдия', status: 'active', url: `${HUB}/c/guild/`, schema: null });
+    }
+    if (url.pathname === '/hub/api/club/update') {
+      const body = route.request().postDataJSON();
+      updates.push(body);
+      return json({ changes: [{ severity: 'danger', text: 'events: поле «location» будет удалено' }], danger: true, seeded: 0, same: false, applied: !body.dryRun });
+    }
+    return json({ message: 'нет' }, 404);
+  });
+
+  await page.getByTestId('nav-publish').click();
+  await page.getByTestId('publish-hub').click();
+  const dialog = page.getByRole('dialog', { name: 'Хаб вуза' });
+  await dialog.getByTestId('hub-url').fill('clubs.uni.test');
+  await dialog.getByTestId('hub-check').click();
+  await expect(dialog).toContainText('Клубы университета');
+  await expect(dialog).toContainText('только сводные цифры');
+  await expect(dialog.getByTestId('hub-join')).toBeDisabled();
+  await dialog.getByTestId('hub-invite').fill('inv_abc');
+  await dialog.getByTestId('hub-slug').fill('guild');
+  await dialog.getByTestId('hub-email').fill('chair@uni.test');
+  await dialog.getByTestId('hub-password').fill('chair-password');
+  await dialog.getByTestId('hub-join').click();
+  await expect(dialog.getByTestId('hub-status')).toHaveText('работает');
+  expect(joinBody).toMatchObject({ invite: 'inv_abc', slug: 'guild', chair: { email: 'chair@uni.test', password: 'chair-password' } });
+  expect((joinBody as unknown as { schema: { entities: unknown[] } }).schema.entities.length).toBeGreaterThan(0);
+
+  // Ключ клуба не попадает в схему.
+  const stored = await page.evaluate(() => localStorage.getItem('facet-os:schema') ?? '');
+  expect(stored).not.toContain('fct_test');
+
+  await dialog.getByTestId('hub-preview').click();
+  await expect(dialog.getByTestId('hub-changes')).toContainText('будет удалено');
+  await expect(dialog.getByTestId('hub-apply')).toBeDisabled();
+  await dialog.getByRole('checkbox').check();
+  await dialog.getByTestId('hub-apply').click();
+  await expect(dialog.getByTestId('hub-changes')).toContainText('обновлена');
+  expect(updates.map((u) => [u.dryRun, u.accept])).toEqual([[true, undefined], [false, true]]);
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('publish-hub')).toContainText('Обновить в хабе');
+});

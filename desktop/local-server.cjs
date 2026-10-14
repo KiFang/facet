@@ -42,12 +42,15 @@ const stamp = () => new Date().toISOString().replace(/[:T]/g, '-').replace(/\..+
 
 class LocalServer {
   /**
-   * @param {{ baseDir: string, pbBinary: string }} opts
+   * @param {{ baseDir: string, pbBinary: string, baseEnv?: Record<string, string | undefined>, keepBackups?: number }} opts
    * baseDir/system — файлы системы (как папка портала на сервере), baseDir/backups — копии перед обновлениями.
+   * baseEnv — окружение процесса PocketBase (по умолчанию окружение приложения); keepBackups — сколько копий хранить.
    */
-  constructor({ baseDir, pbBinary }) {
+  constructor({ baseDir, pbBinary, baseEnv = process.env, keepBackups = 0 }) {
     this.baseDir = baseDir;
     this.pbBinary = pbBinary;
+    this.baseEnv = baseEnv;
+    this.keepBackups = keepBackups;
     this.systemDir = path.join(baseDir, 'system');
     this.backupsDir = path.join(baseDir, 'backups');
     this.settingsFile = path.join(baseDir, 'desktop.json');
@@ -121,6 +124,9 @@ class LocalServer {
       if (!this.installed()) throw new Error('Система ещё не установлена на этом компьютере');
       fs.mkdirSync(this.backupsDir, { recursive: true });
       fs.cpSync(this.systemDir, path.join(this.backupsDir, `update-${stamp()}`), { recursive: true });
+      if (this.keepBackups > 0) {
+        for (const old of this.backups().slice(this.keepBackups)) fs.rmSync(path.join(this.backupsDir, old), { recursive: true, force: true });
+      }
     } else if (this.installed()) {
       throw new Error('Система уже установлена — используйте обновление, чтобы не потерять данные');
     }
@@ -129,7 +135,7 @@ class LocalServer {
       // Файлы плагинов генерируются целиком — убираем прежние (в т.ч. отключённых плагинов).
       const hooks = path.join(this.systemDir, 'pocketbase', 'pb_hooks');
       for (const f of fs.existsSync(hooks) ? fs.readdirSync(hooks) : []) {
-        if (/^plugin-.*\.pb\.js$/.test(f)) fs.rmSync(path.join(hooks, f));
+        if (/^plugin-.*\.pb\.js$/.test(f) || /^facet-registers\./.test(f)) fs.rmSync(path.join(hooks, f));
       }
       fs.rmSync(path.join(this.systemDir, 'web', 'plugins'), { recursive: true, force: true });
       const defaults = bundle.files.find((f) => f.path === 'env.defaults');
@@ -190,7 +196,7 @@ class LocalServer {
     } catch {
       /* имя по умолчанию */
     }
-    const env = { ...process.env, ...this.env(), FACET_CLUB_NAME: clubName };
+    const env = { ...this.baseEnv, ...this.env(), FACET_CLUB_NAME: clubName };
     const pb = path.join(this.systemDir, 'pocketbase');
     this.logs = [];
     const proc = spawn(this.pbBinary, [

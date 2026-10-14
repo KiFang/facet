@@ -180,7 +180,7 @@ The **Appearance** node sets the portal look: logo, palette, font, corner radius
     title: 'Home page',
     icon: 'Home',
     body: `
-The portal home page is a club overview. Enable it and choose blocks: **Stats** (record counts), **Upcoming** (future dated records), **Statuses** (records by status) and **Recent** (latest records). Reorder blocks with the arrows. If the home page is off, the portal opens on the first section.
+The portal home page is a club overview. Enable it and choose blocks: **Needs attention** (drafts and negative balances), **Balances** (register totals), **Stats** (record counts), **Upcoming** (future dated records), **Statuses** (records by status) and **Recent** (latest records). Reorder blocks with the arrows. If the home page is off, the portal opens on the first section.
 `,
   },
   {
@@ -234,6 +234,34 @@ Until you save, changes are only marked: green **+** — new row; pencil and yel
 `,
   },
   {
+    id: 'accounting',
+    group: 'Data',
+    title: 'Accounting: operations and balances',
+    icon: 'Wallet',
+    body: `
+Like accounting software, Facet OS has **lists** (members, equipment), **operations** (cash entries, equipment loans) and **balance registers** (cash, equipment on loan).
+
+Use **Accounting → +** in the configuration for ready solutions: **Club cash** (income and expenses by category) and **Equipment loans** (who has what; you cannot return more than was issued).
+
+A confirmed operation writes movements to registers: income as “+”, expense as “−”. The **Balances** page of the workspace shows the totals. Editing or deleting an operation recalculates balances; **Unconfirm** turns it into a draft.
+
+>! With **Never below zero**, the server rejects an operation (or an edit or deletion) that would make a balance negative.
+
+For your own register, set **dimensions** (what the balance is counted by) and **resources** (what is summed), then add posting rules to an operation section in **Section type**.
+`,
+  },
+  {
+    id: 'reports',
+    group: 'Data',
+    title: 'Reports and print forms',
+    icon: 'Printer',
+    body: `
+The workspace **Reports** tab has **Register turnover** (opening balance, in, out, closing balance for a period) and **Section summary** (count and sum grouped by a field, link or month). The default period is the current semester; **CSV** exports for Excel.
+
+**Print forms** are document templates (handover act, cash voucher, minutes). The form button on a record page opens an A4 sheet to print or save as PDF. Edit forms in section properties: \`# Title\`, \`**bold**\`, \`---\`, tables \`| a | b |\`, and placeholders \`{{Field name}}\`, \`{{club}}\`, \`{{today}}\`, \`{{user}}\`, \`{{number}}\`.
+`,
+  },
+  {
     id: 'import',
     group: 'Data',
     title: 'Spreadsheet import',
@@ -247,6 +275,44 @@ Until you save, changes are only marked: green **+** — new row; pencil and yel
 4. Import. Rows go to the **draft** and are loaded into the database on export.
 
 When creating a section, choose **From spreadsheet** to derive fields from the columns. In the [data editor](#data) you can also paste cells from Excel or add rows from a CSV file.
+`,
+  },
+  {
+    id: 'roles',
+    group: 'System',
+    title: 'Roles & access',
+    icon: 'ShieldCheck',
+    body: `
+Facet OS is the club team's internal system. Like an accounting system, it is used by staff (chair, treasurer, storekeeper, organizers), not by every member.
+
+## Roles
+
+**System → Roles & access** in the configuration. Ready roles: **Chair**, **Treasurer**, **Storekeeper**, **Organizer**. Rename them, add your own, delete any except the chair. **Manages staff** lets a role add people, assign roles and reset passwords.
+
+## Permissions by section
+
+Each matrix cell is a role's access to a section; a click cycles **no access → view → edit**. The **Default** row applies to sections without their own setting and to new sections. The same settings appear in section properties, **Access** block.
+
+## Public sections
+
+**Visible without sign-in** opens a section to guests (for example an event listing). Only roles with edit rights can still change it.
+
+> Check permissions right in the preview: use **View as** above the portal.
+
+>! After changing roles, export an update — permissions apply on the server once it is installed.
+`,
+  },
+  {
+    id: 'workspace',
+    group: 'System',
+    title: 'Team workspace',
+    icon: 'Table2',
+    body: `
+The workspace is the club portal after signing in. Staff see only their role's sections and can add, edit and delete records where the role has edit rights.
+
+On a record page, **Create based on** creates a linked record: “+ Issue” from a member, “Register the return” from an issue (fields are copied). Rules are set in section properties, “Create based on”.
+
+The first sign-in is the chair with the admin email and password from \`.env\`; the chair then adds others on the **Staff** page (name, email, role, password), changes roles and resets passwords. Everyone changes their own password in **Profile** (click your name in the header).
 `,
   },
   {
@@ -288,7 +354,7 @@ See \`docs/PLUGINS.md\` in the repository to write your own.
 
 1. Copy it to a Linux server and unpack.
 2. Run \`sudo ./install.sh\` (with a domain: \`sudo ./install.sh club.example.org\` — HTTPS is set up automatically).
-3. Open the address printed by the script. Admin credentials are in \`.env\`. Details are in \`DEPLOY.md\` inside the archive.
+3. Open the address printed by the script and sign in to the workspace as the chair with the admin email and password from \`.env\`. Details are in \`DEPLOY.md\` inside the archive.
 
 ## Updates
 
@@ -303,6 +369,47 @@ In the desktop app use **Publish → Run on this computer**. The server runs whi
 ## Backups
 
 The server makes scheduled backups (configured in \`.env\`, optionally to S3). Manually: \`./backup.sh\`; restore: \`./restore.sh <backup folder>\`.
+`,
+  },
+  {
+    id: 'hub',
+    group: 'System',
+    title: 'University hub',
+    icon: 'Landmark',
+    body: `
+**Facet Hub** is a clubs server that a university or college runs itself. A club joins in a minute, and its accounting system runs on the university server: no server, domain or setup of its own.
+
+## What the university sees
+
+By default — **totals only**: record counts per section, how many were added in a period, cash and stock totals. The records themselves (people, amounts, loans) are visible only to the club team according to their roles. If the university enabled full access, this is shown when joining.
+
+## Connect a club from the editor
+
+1. Open **Publish → University hub** (or **File → University hub…**).
+2. Enter the hub address from your university and press **Check** — you will see the hub name and its rules.
+3. Enter the invite code (if the hub uses invites), the club address, the chair's email and password.
+4. **Connect** — the hub builds the system from your configuration. Data imported into the editor can be transferred right away.
+
+If the hub works with requests, the system opens after the university approves it.
+
+You can also join without the editor: the hub page has a **Connect a club** button — choose a template, accounting packs and draft data.
+
+## Club key
+
+When joining, the editor receives a **club key** and keeps it to itself — it never goes into the schema file or a share link. To update from another computer, choose **I have a key**. The university can reissue a lost key.
+
+## Update the system in the hub
+
+Change the configuration in the editor and open **University hub**:
+
+- **Check changes** — what will change in the database, without applying anything.
+- **Update system** — apply. Changes that delete data (a field, a section) need an extra confirmation. The hub makes a full backup first; the university can roll it back.
+
+Third-party plugins with code are usually not allowed in a hub — built-in ones (Telegram, autonumber, audit log) work.
+
+## Deploy a hub (for universities)
+
+The guide for IT staff is in the repository, \`hub/README.md\`: Docker, domain, first administrator, access settings.
 `,
   },
   {
