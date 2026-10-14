@@ -117,6 +117,7 @@ export function buildAccountingPack(schema: ClubSchema, pack: AccountingPackId):
         relations: [],
         view: { type: 'table' },
         postings: [{ register: regId, direction: { field: 'type', in: [give], out: [back] }, dimensions: { item: 'item', holder: 'holder' }, resources: { qty: 'qty' }, dateField: 'date' }],
+        basedOn: [{ from: opId, label: en ? 'Register the return' : 'Оформить возврат', set: { type: back } }],
       },
     ],
   };

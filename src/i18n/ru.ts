@@ -705,6 +705,19 @@ export const ru = {
   'reg.subtitle': "Регистр остатков",
 
   'grid.posted': "Подтверждена",
+
+  'dashboard.attention': "Что требует внимания",
+  'dashboard.balances': "Остатки (итоги регистров)",
+
+  'basis.title': "Ввод на основании",
+  'basis.hint': "Кнопка на странице записи: создаёт запись этого раздела, копирует совпадающие поля и ставит ссылку. Связанные разделы получают кнопку «+ …» автоматически.",
+  'basis.from': "Из записи",
+  'basis.label': "Кнопка",
+  'basis.set': "Заполнить",
+  'basis.value': "Значение",
+  'basis.nothing': "— ничего —",
+  'basis.add': "Правило",
+  'basis.newLabel': "Создать на основании",
 };
 
 export type UiStrings = typeof ru;

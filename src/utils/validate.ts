@@ -10,7 +10,7 @@ const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const ID = /^[a-z][a-z0-9_]*$/;
 const FONTS = ['inter', 'manrope', 'rubik', 'pt-serif', 'jetbrains', 'system'];
 const VIEWS = ['cards', 'table', 'kanban', 'calendar'];
-const WIDGETS = ['stats', 'upcoming', 'statuses', 'recent'];
+const WIDGETS = ['attention', 'balances', 'stats', 'upcoming', 'statuses', 'recent'];
 /** Системные имена коллекций PocketBase, которые нельзя занимать. */
 export const RESERVED_COLLECTIONS = ['users', 'staff'];
 /** Системные имена полей PocketBase. */

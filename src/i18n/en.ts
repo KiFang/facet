@@ -706,4 +706,17 @@ export const en: UiStrings = {
   'reg.subtitle': "Balance register",
 
   'grid.posted': "Confirmed",
+
+  'dashboard.attention': "Needs attention",
+  'dashboard.balances': "Balances (register totals)",
+
+  'basis.title': "Create based on",
+  'basis.hint': "A button on the record page creates a record of this section, copies matching fields and links it. Linked sections get a “+ …” button automatically.",
+  'basis.from': "From",
+  'basis.label': "Button",
+  'basis.set': "Set",
+  'basis.value': "Value",
+  'basis.nothing': "— nothing —",
+  'basis.add': "Rule",
+  'basis.newLabel': "Create based on this",
 };

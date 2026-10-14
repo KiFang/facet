@@ -8,7 +8,9 @@ import {
   portalFeatureSet, recordTitle, relationsOf, statusFieldOf, titleFieldOf,
 } from './model';
 import type { DataSource, PortalAssets, PortalRecord } from './types';
-import { renderUserBar, type WorkspaceCtx } from './workspace';
+import { renderUserBar, type MovementsState, type WorkspaceCtx } from './workspace';
+import { balances } from '@/utils/registers';
+import { basisActions } from './basis';
 
 /* Чистые функции: состояние → HTML-строка. Никакого DOM — легко тестировать и встраивать в превью. */
 
@@ -33,6 +35,8 @@ export interface RenderCtx {
   now: Date;
   /** Рабочее место: пользователь и права. Нет — режим просмотра (тесты, старые схемы). */
   ws?: WorkspaceCtx;
+  /** Движения регистров (для остатков на главной). */
+  movements?: (registerId: string) => MovementsState | undefined;
 }
 
 /** Может ли текущий пользователь менять раздел прямо в портале. */
@@ -412,6 +416,25 @@ ${undated ? `<p class="fx-muted">${esc(ctx.t('noDate', { n: undated }))}</p>` : 
 
 /* --------------------------------- detail ---------------------------------- */
 
+/** Название записи для измерения-ссылки (или само значение). */
+export function dimTitle(ctx: RenderCtx, target: string | undefined, value: string): string {
+  if (!target || !value) return value;
+  const e = ctx.schema.entities.find((x) => x.id === target);
+  const st = e && ctx.data(e.id);
+  const rec = st?.status === 'ok' ? st.records.find((r) => r.id === value) : undefined;
+  return e && rec ? recordTitle(e, rec, value) : value;
+}
+
+/** Кнопки «Создать на основании» на странице записи. */
+function basisBlock(ctx: RenderCtx, entity: ClubEntity): string {
+  if (!ctx.ws || ctx.ws.legacy || !ctx.ws.writable) return '';
+  const actions = basisActions(ctx.schema, entity, (e) => canWrite(ctx, e));
+  if (!actions.length) return '';
+  return `<div class="fx-basis"><span class="fx-muted">${esc(ctx.t('createBasis'))}:</span>${actions
+    .map((a) => `<button type="button" class="fx-btn fx-btn-ghost" data-basis="${esc(a.target.id)}"${a.rule === null ? '' : ` data-rule="${a.rule}"`}>${icon(a.target.icon, 15)}${esc(a.label)}</button>`)
+    .join('')}</div>`;
+}
+
 export interface Backlink {
   entity: ClubEntity;
   label: string;
@@ -505,6 +528,7 @@ export function renderDetail(ctx: RenderCtx, entity: ClubEntity, recordId: strin
         : ''
     }</div>
   </header>
+  ${basisBlock(ctx, entity)}
   ${images.length ? `<div class="fx-gallery">${images.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}
   <section class="fx-panel"><h3>${esc(t('details'))}</h3><dl class="fx-rows fx-rows-wide">${rows}${relRows}</dl></section>
   <section class="fx-panel"><h3>${icon('Link', 16)}${esc(t('related'))}</h3>${related}</section>
@@ -523,7 +547,45 @@ export function renderDashboard(ctx: RenderCtx): string {
   };
   const anyLoading = schema.entities.some((e) => !ctx.data(e.id) || ctx.data(e.id)!.status === 'loading');
 
+  const regs = ctx.ws?.registers ?? [];
+  const regRows = (id: string) => {
+    const st = ctx.movements?.(id);
+    const reg = regs.find((r) => r.id === id)!;
+    return st?.status === 'ok' ? balances(reg, st.rows) : null;
+  };
+  const num = (n: number) => n.toLocaleString(ctx.locale, { maximumFractionDigits: 2 });
+
   for (const w of widgets) {
+    if (w === 'attention' && (regs.length || schema.entities.some((e) => e.kind === 'operation'))) {
+      const items: string[] = [];
+      for (const e of schema.entities.filter((x) => x.kind === 'operation')) {
+        const drafts = (ok(e) ?? []).filter((r) => !r.posted);
+        if (!drafts.length) continue;
+        items.push(`<li class="fx-attn-item">${icon('CircleDashed', 15)}<div><a ${navAttr(`/${e.id}`)}><b>${esc(e.pluralName)}</b></a> — ${esc(t('drafts', { n: drafts.length }))}<div class="fx-attn-links">${drafts
+          .slice(0, 4).map((r) => `<a class="fx-chip" ${navAttr(recordPath(e, r))}>${esc(recordTitle(e, r, t('untitled')))}</a>`).join('')}</div></div></li>`);
+      }
+      for (const reg of regs) {
+        const rows = regRows(reg.id);
+        const neg = (rows ?? []).filter((r) => reg.resources.some((x) => r.res[x.id] < -1e-9));
+        if (!neg.length) continue;
+        items.push(`<li class="fx-attn-item fx-attn-warn">${icon('TriangleAlert', 15)}<div><a ${navAttr('/balances')}><b>${esc(reg.name)}</b></a> — ${esc(t('negative'))}: ${neg
+          .slice(0, 4).map((r) => esc(reg.dimensions.map((d) => dimTitle(ctx, d.target, r.dims[d.id])).filter(Boolean).join(' · ') || '—')).join(', ')}</div></li>`);
+      }
+      const loading = schema.entities.some((e) => e.kind === 'operation' && !ok(e)) || regs.some((r) => !regRows(r.id));
+      parts.push(`<section class="fx-panel fx-attention"><h3>${icon('ListChecks', 16)}${esc(t('attention'))}</h3>${
+        items.length ? `<ul class="fx-attn-list">${items.join('')}</ul>` : loading ? `<p class="fx-muted">${esc(t('loading'))}</p>` : `<p class="fx-muted">${icon('CircleCheck', 14)} ${esc(t('allGood'))}</p>`
+      }</section>`);
+    }
+    if (w === 'balances' && regs.length) {
+      parts.push(`<section class="fx-stats">${regs
+        .map((reg) => {
+          const rows = regRows(reg.id);
+          const main = reg.resources[0];
+          const total = rows ? rows.reduce((n, r) => n + r.res[main.id], 0) : null;
+          return `<a class="fx-stat" ${navAttr('/balances')} data-reg-total="${esc(reg.id)}"><span class="fx-stat-icon">${icon(reg.icon ?? 'Wallet', 18)}</span><span class="fx-stat-num${total !== null && total < 0 ? ' fx-neg' : ''}">${total === null ? '…' : esc(num(total))}</span><span class="fx-stat-label">${esc(reg.name)}${rows && reg.dimensions.length ? ` · ${esc(t('positions', { n: rows.length }))}` : ''}</span></a>`;
+        })
+        .join('')}</section>`);
+    }
     if (w === 'stats') {
       parts.push(`<section class="fx-stats">${schema.entities
         .map((e) => {

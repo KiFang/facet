@@ -6,6 +6,7 @@ import {
   type EntityUiState, type LoadState, type RenderCtx,
 } from './render';
 import type { DataSource, PortalAssets, PortalRecord, Router } from './types';
+import { basisValues } from './basis';
 import { accessFor, ApiError, canManageStaff, canReadRegister, legacyMode, type Session } from './session';
 import {
   readForm, renderBalances, renderForm, renderLogin, renderProfile, renderStaff,
@@ -80,6 +81,8 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
   let movements = new Map<string, MovementsState>();
   /** Сообщение над страницей (ошибка проведения и т. п.); сбрасывается при переходе. */
   let notice: { tone: 'error' | 'ok'; text: string } | null = null;
+  /** Значения для новой записи «на основании» другой. */
+  let prefill: { entityId: string; values: PortalRecord } | null = null;
 
   const ws = (): WorkspaceCtx => {
     const user = session?.user() ?? null;
@@ -155,7 +158,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
 
   const ctx = (): RenderCtx => {
     const locale = schema.locale ?? 'ru';
-    return { schema: visibleSchema(), t: portalT(locale), locale, source, assets, data: (id) => data.get(id), now: now(), ws: ws() };
+    return { schema: visibleSchema(), t: portalT(locale), locale, source, assets, data: (id) => data.get(id), now: now(), ws: ws(), movements: (id) => movements.get(id) };
   };
 
   const loadMovements = () => {
@@ -198,6 +201,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
     const key = `${route.page ?? ''}/${route.entity?.id ?? ''}/${route.recordId ?? ''}/${route.form ? 'form' : ''}`;
     const sameScreen = key === renderedKey;
     renderedKey = key;
+    if (prefill && !(route.form && !route.recordId && route.entity?.id === prefill.entityId)) prefill = null;
     if (key !== formKey) {
       formKey = key;
       formState = {};
@@ -226,6 +230,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
       body = renderEmpty(c.t('noEntities'), c.t('noEntitiesHint'));
     } else if (!route.entity) {
       c.schema.entities.forEach(load);
+      if (c.schema.dashboard?.widgets.some((x) => x === 'attention' || x === 'balances')) loadMovements();
       body = (needsLogin() && w.hasPublic ? `<div class="fx-alert fx-alert-info">${c.t('publicOnly')}</div>` : '') + renderDashboard(c);
     } else if (route.form) {
       active = route.entity.id;
@@ -240,7 +245,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
         const record = state?.status === 'ok' ? state.records.find((r) => r.id === route.recordId) : undefined;
         body = state?.status !== 'ok' ? `<div class="fx-empty fx-loading">${c.t('loading')}</div>`
           : record ? renderForm(c, route.entity, record, formState) : renderEmpty(c.t('recordNotFound'), c.t('recordNotFoundHint'));
-      } else body = renderForm(c, route.entity, null, formState);
+      } else body = renderForm(c, route.entity, null, formState, prefill?.entityId === route.entity.id ? prefill.values : undefined);
     } else if (route.recordId) {
       active = route.entity.id;
       load(route.entity);
@@ -354,6 +359,17 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
       options.router.go('/');
       return;
     }
+    const basisBtn = target.closest<HTMLElement>('[data-basis]');
+    if (basisBtn && entity) {
+      const route = parseRoute(options.router.get());
+      const st = data.get(entity.id);
+      const record = st?.status === 'ok' ? st.records.find((r) => r.id === route.recordId) : undefined;
+      const targetEntity = schema.entities.find((e) => e.id === basisBtn.dataset.basis);
+      if (!record || !targetEntity) return;
+      prefill = { entityId: targetEntity.id, values: basisValues(schema, entity, record, targetEntity, basisBtn.dataset.rule === undefined ? null : Number(basisBtn.dataset.rule)) };
+      options.router.go(`/${targetEntity.id}/new`);
+      return;
+    }
     const postBtn = target.closest<HTMLElement>('[data-post]');
     if (postBtn && entity && source.update) {
       const recordId = parseRoute(options.router.get()).recordId;
@@ -453,6 +469,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
       const op = id ? source.update!(entity, id, { values, files }) : source.create!(entity, { values, files });
       op.then((rec: PortalRecord) => {
         formState = {};
+        prefill = null;
         invalidate(entity.id);
         options.router.go(`/${entity.id}/${rec.id}`);
       }).catch((err: ApiError) => {

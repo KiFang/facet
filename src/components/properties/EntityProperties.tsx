@@ -24,6 +24,7 @@ import { toast } from '../ui/Toast';
 import { PropertyPage } from './PropertyPage';
 import { AccessCell } from './RolesProperties';
 import { PostingsEditor } from './PostingsEditor';
+import { BasisEditor } from './BasisEditor';
 import { accessOf, CHAIR_ROLE } from '@/utils/access';
 
 export const FIELD_ICONS: Record<FieldType, LucideIcon> = {
@@ -424,6 +425,12 @@ export function EntityProperties({ entity }: { entity: ClubEntity }) {
         <p className="text-2xs text-fg-subtle">{entity.kind === 'operation' ? t('kind.operationHint') : t('kind.catalogHint')}</p>
         {entity.kind === 'operation' && <PostingsEditor entity={entity} />}
       </Section>
+
+      {editable && (
+        <Section title={t('basis.title')}>
+          <BasisEditor entity={entity} />
+        </Section>
+      )}
 
       <Section title={t('view.title')} action={<span className="text-2xs text-fg-subtle">{t('view.hint')}</span>}>
         <ViewEditor entity={entity} />

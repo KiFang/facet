@@ -66,3 +66,19 @@ describe('registers', () => {
     expect(postingProblems(broken).join()).toMatch(/Сумма/);
   });
 });
+
+describe('create based on', () => {
+  it('links the source and applies rule values', async () => {
+    const { basisActions, basisValues } = await import('@/portal/basis');
+    const schema = withPacks();
+    const members = schema.entities.find((e) => e.id === 'members')!;
+    const issues = schema.entities.find((e) => e.id === 'issues')!;
+    const fromMember = basisActions(schema, members, () => true).map((a) => a.target.id);
+    expect(fromMember).toContain('issues');
+    expect(basisValues(schema, members, { id: 'm1' }, issues, null)).toMatchObject({ holder: 'm1', posted: true });
+    const issue = { id: 'i9', date: '2026-09-01 10:00:00.000Z', type: 'Выдача', item: 'x', holder: 'm1', qty: 2, posted: true };
+    const actions = basisActions(schema, issues, () => true);
+    expect(actions[0]).toMatchObject({ label: 'Оформить возврат', rule: 0 });
+    expect(basisValues(schema, issues, issue, issues, 0)).toMatchObject({ type: 'Возврат', item: 'x', holder: 'm1', qty: 2, date: issue.date });
+  });
+});

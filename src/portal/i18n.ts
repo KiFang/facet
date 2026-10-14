@@ -96,6 +96,12 @@ const ru = {
   noMovements: 'Пока нет подтверждённых операций.',
   total: 'Итого',
   movementsCount: 'Операций: {n}',
+  attention: 'Что требует внимания',
+  allGood: 'Всё в порядке: черновиков и отрицательных остатков нет.',
+  drafts: 'Неподтверждённые операции: {n}',
+  negative: 'Отрицательный остаток',
+  positions: 'позиций: {n}',
+  createBasis: 'Создать на основании',
 };
 
 export type PortalStrings = typeof ru;
@@ -196,6 +202,12 @@ const en: PortalStrings = {
   noMovements: 'No confirmed operations yet.',
   total: 'Total',
   movementsCount: 'Operations: {n}',
+  attention: 'Needs attention',
+  allGood: 'All good: no drafts and no negative balances.',
+  drafts: 'Unconfirmed operations: {n}',
+  negative: 'Negative balance',
+  positions: 'rows: {n}',
+  createBasis: 'Create based on this',
 };
 
 const DICTS: Record<Locale, PortalStrings> = { ru, en };

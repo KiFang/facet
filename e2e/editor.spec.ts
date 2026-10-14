@@ -333,6 +333,18 @@ test('учёт: касса и выдача инвентаря, остатки и
   await pv.locator('[data-nav="/balances"]').first().click();
   await expect.poll(async () => toNum(await pv.locator('[data-balance="cash"] tfoot .fx-num').textContent())).toBe(toNum(before));
 
+  // Ввод на основании: из выдачи — «Оформить возврат» с теми же предметом и человеком.
+  await pv.locator('[data-nav="/issues"]').first().click();
+  await pv.locator('.fx-table tbody tr').first().click();
+  await pv.getByRole('button', { name: 'Оформить возврат' }).click();
+  await expect(pv.locator('select[name=type]')).toHaveValue('Возврат');
+  await expect(pv.locator('select[name=item]')).not.toHaveValue('');
+
+  // Главная: что требует внимания и итоги регистров.
+  await pv.locator('[data-nav="/"]').first().click();
+  await expect(pv.locator('.fx-attention')).toContainText('Движения денег');
+  await expect(pv.locator('[data-reg-total="cash"]')).toBeVisible();
+
   // В архиве — хук проведения и коллекции регистров.
   await page.keyboard.press('Control+KeyE');
   const [d] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Скачать .zip/ }).click()]);

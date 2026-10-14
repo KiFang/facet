@@ -180,7 +180,7 @@ The **Appearance** node sets the portal look: logo, palette, font, corner radius
     title: 'Home page',
     icon: 'Home',
     body: `
-The portal home page is a club overview. Enable it and choose blocks: **Stats** (record counts), **Upcoming** (future dated records), **Statuses** (records by status) and **Recent** (latest records). Reorder blocks with the arrows. If the home page is off, the portal opens on the first section.
+The portal home page is a club overview. Enable it and choose blocks: **Needs attention** (drafts and negative balances), **Balances** (register totals), **Stats** (record counts), **Upcoming** (future dated records), **Statuses** (records by status) and **Recent** (latest records). Reorder blocks with the arrows. If the home page is off, the portal opens on the first section.
 `,
   },
   {
@@ -298,6 +298,8 @@ Each matrix cell is a role's access to a section; a click cycles **no access →
     icon: 'Table2',
     body: `
 The workspace is the club portal after signing in. Staff see only their role's sections and can add, edit and delete records where the role has edit rights.
+
+On a record page, **Create based on** creates a linked record: “+ Issue” from a member, “Register the return” from an issue (fields are copied). Rules are set in section properties, “Create based on”.
 
 The first sign-in is the chair with the admin email and password from \`.env\`; the chair then adds others on the **Staff** page (name, email, role, password), changes roles and resets passwords. Everyone changes their own password in **Profile** (click your name in the header).
 `,

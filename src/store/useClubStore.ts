@@ -183,6 +183,7 @@ export const useClubStore = create<ClubState>()(
                   ...e,
                   relations: e.relations.filter((r) => r.targetEntityId !== id),
                   fields: e.fields.filter((fld) => !(fld.type === 'relation' && fld.targetEntityId === id)),
+                  ...(e.basedOn?.some((b) => b.from === id) ? { basedOn: e.basedOn.filter((b) => b.from !== id) } : {}),
                 }),
               );
             const seeds = { ...s.seeds };
@@ -218,6 +219,7 @@ export const useClubStore = create<ClubState>()(
               ...(e.id === id ? { id: nextId, uid: e.uid ?? e.id } : {}),
               relations: e.relations.map((r) => (r.targetEntityId === id ? { ...r, targetEntityId: nextId } : r)),
               fields: e.fields.map((f) => (f.targetEntityId === id ? { ...f, targetEntityId: nextId } : f)),
+              ...(e.basedOn?.some((b) => b.from === id) ? { basedOn: e.basedOn.map((b) => (b.from === id ? { ...b, from: nextId } : b)) } : {}),
             }));
             const seeds = { ...s.seeds };
             if (seeds[id]) {

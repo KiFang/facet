@@ -101,6 +101,17 @@ export interface ClubEntity {
   kind?: 'catalog' | 'operation';
   /** Как операция меняет остатки. */
   postings?: Posting[];
+  /**
+   * «Ввод на основании»: из записи раздела `from` создаётся запись этого раздела —
+   * совпадающие поля копируются, `set` задаёт значения (например, вид «Возврат»).
+   */
+  basedOn?: BasisRule[];
+}
+
+export interface BasisRule {
+  from: string;
+  label: string;
+  set?: Record<string, string>;
 }
 
 /** Направление движения: всегда приход, всегда расход или по значению поля операции. */
@@ -148,7 +159,7 @@ export interface ClubRole {
   manageStaff?: boolean;
 }
 
-export type DashboardWidget = 'stats' | 'upcoming' | 'statuses' | 'recent';
+export type DashboardWidget = 'attention' | 'balances' | 'stats' | 'upcoming' | 'statuses' | 'recent';
 
 export interface DashboardConfig {
   enabled: boolean;
@@ -176,7 +187,7 @@ export interface ClubSchema {
   registers?: ClubRegister[];
 }
 
-export const DEFAULT_DASHBOARD: DashboardConfig = { enabled: true, widgets: ['stats', 'upcoming', 'statuses', 'recent'] };
+export const DEFAULT_DASHBOARD: DashboardConfig = { enabled: true, widgets: ['attention', 'balances', 'stats', 'upcoming', 'statuses', 'recent'] };
 
 /** Ключ сущности/поля для сравнения версий схемы. */
 export const keyOf = (x: { id: string; uid?: string }): string => x.uid ?? x.id;

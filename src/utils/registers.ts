@@ -91,6 +91,8 @@ export function registerReaders(schema: ClubSchema, reg: ClubRegister) {
 /** Ошибки настройки проведения (для строки состояния и валидатора). */
 export function postingProblems(schema: ClubSchema): string[] {
   const out: string[] = [];
+  for (const e of schema.entities)
+    for (const b of e.basedOn ?? []) if (!schema.entities.some((x) => x.id === b.from)) out.push(`${e.pluralName}: «${b.label}» — нет раздела «${b.from}»`);
   for (const e of operationsOf(schema)) {
     for (const p of e.postings ?? []) {
       const reg = schema.registers?.find((r) => r.id === p.register);

@@ -104,16 +104,17 @@ function relationInput(ctx: RenderCtx, entity: ClubEntity, name: string, record:
 }
 
 /** Форма создания или изменения записи. */
-export function renderForm(ctx: RenderCtx, entity: ClubEntity, record: PortalRecord | null, state: FormState): string {
+export function renderForm(ctx: RenderCtx, entity: ClubEntity, record: PortalRecord | null, state: FormState, initial?: PortalRecord): string {
   const { t } = ctx;
+  const src = record ?? initial ?? null;
   const back = record ? `/${entity.id}/${record.id}` : `/${entity.id}`;
   const title = record ? t('editRecord', { title: recordTitle(entity, record, t('untitled')) }) : t('addRecord', { name: entity.name });
   const extra = relationsOf(ctx.schema, entity).filter((r) => !entity.fields.some((f) => f.id === r.name));
   const row = (name: string, label: string, required: boolean, control: string) =>
     `<div class="fx-form-row"><label class="fx-label" for="${fieldId(entity, name)}">${esc(label)}${required ? ' <span class="fx-req">*</span>' : ''}</label>${control}${errorOf(state, name, t)}</div>`;
   const fields = entity.fields
-    .map((f) => row(f.id, f.name, f.required, f.type === 'relation' ? relationInput(ctx, entity, f.id, record) : scalarInput(ctx, entity, f, record)))
-    .concat(extra.map((r) => row(r.name, r.label, r.required, relationInput(ctx, entity, r.name, record))))
+    .map((f) => row(f.id, f.name, f.required, f.type === 'relation' ? relationInput(ctx, entity, f.id, src) : scalarInput(ctx, entity, f, src)))
+    .concat(extra.map((r) => row(r.name, r.label, r.required, relationInput(ctx, entity, r.name, src))))
     .join('');
   return `<a class="fx-back" data-nav="${esc(back)}" href="#${esc(back)}">${icon('ArrowLeft', 15)}${esc(record ? recordTitle(entity, record, t('untitled')) : entity.pluralName)}</a>
 <form class="fx-form fx-panel" data-record-form="${esc(entity.id)}"${record ? ` data-record-id="${esc(record.id)}"` : ''} novalidate>
