@@ -251,6 +251,17 @@ For your own register, set **dimensions** (what the balance is counted by) and *
 `,
   },
   {
+    id: 'reports',
+    group: 'Data',
+    title: 'Reports and print forms',
+    icon: 'Printer',
+    body: `
+The workspace **Reports** tab has **Register turnover** (opening balance, in, out, closing balance for a period) and **Section summary** (count and sum grouped by a field, link or month). The default period is the current semester; **CSV** exports for Excel.
+
+**Print forms** are document templates (handover act, cash voucher, minutes). The form button on a record page opens an A4 sheet to print or save as PDF. Edit forms in section properties: \`# Title\`, \`**bold**\`, \`---\`, tables \`| a | b |\`, and placeholders \`{{Field name}}\`, \`{{club}}\`, \`{{today}}\`, \`{{user}}\`, \`{{number}}\`.
+`,
+  },
+  {
     id: 'import',
     group: 'Data',
     title: 'Spreadsheet import',

@@ -7,6 +7,8 @@ import {
 } from './render';
 import type { DataSource, PortalAssets, PortalRecord, Router } from './types';
 import { basisValues } from './basis';
+import { renderPrintPage } from './printforms';
+import { defaultReportState, renderReports, tableToCsv, type ReportState } from './reports';
 import { accessFor, ApiError, canManageStaff, canReadRegister, legacyMode, type Session } from './session';
 import {
   readForm, renderBalances, renderForm, renderLogin, renderProfile, renderStaff,
@@ -37,11 +39,13 @@ export interface PortalHandle {
 
 interface Route {
   /** Служебные страницы рабочего места. */
-  page?: 'login' | 'staff' | 'profile' | 'balances';
+  page?: 'login' | 'staff' | 'profile' | 'balances' | 'reports';
   entity: ClubEntity | null;
   recordId: string | null;
   /** Форма: создание (recordId = null) или изменение. */
   form?: boolean;
+  /** Печатная форма записи. */
+  print?: string;
 }
 
 /** Снимок значений формы: перерисовка не должна стирать то, что человек уже ввёл. */
@@ -83,6 +87,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
   let notice: { tone: 'error' | 'ok'; text: string } | null = null;
   /** Значения для новой записи «на основании» другой. */
   let prefill: { entityId: string; values: PortalRecord } | null = null;
+  let report: ReportState = defaultReportState(options.now?.() ?? new Date());
 
   const ws = (): WorkspaceCtx => {
     const user = session?.user() ?? null;
@@ -131,12 +136,13 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
   };
 
   const parseRoute = (path: string): Route => {
-    const [entityId, recordId, action] = path.replace(/^\/+/, '').split('/').map((s) => decodeURIComponent(s));
-    if (entityId === 'login' || entityId === 'staff' || entityId === 'profile' || entityId === 'balances') return { page: entityId, entity: null, recordId: null };
+    const [entityId, recordId, action, printId] = path.replace(/^\/+/, '').split('/').map((s) => decodeURIComponent(s));
+    if (entityId === 'login' || entityId === 'staff' || entityId === 'profile' || entityId === 'balances' || entityId === 'reports') return { page: entityId, entity: null, recordId: null };
     const visible = visibleSchema();
     const entity = visible.entities.find((e) => e.id === entityId) ?? null;
     if (!entity && visible.dashboard?.enabled === false) return { entity: visible.entities[0] ?? null, recordId: null };
     if (entity && recordId === 'new') return { entity, recordId: null, form: true };
+    if (entity && recordId && action === 'print' && printId) return { entity, recordId, print: printId };
     return { entity, recordId: entity && recordId ? recordId : null, form: !!entity && !!recordId && action === 'edit' };
   };
 
@@ -224,6 +230,17 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
         loadMovements();
         body = renderBalances(c, w, movements);
       }
+    } else if (route.page === 'reports') {
+      active = '/reports';
+      if (!c.schema.entities.length) body = needsLogin() ? renderLogin(c, loginState) : renderEmpty(c.t('noAccess'), c.t('noAccessHint'));
+      else {
+        if (w.registers.length && report.tab === 'turnover') loadMovements();
+        else {
+          const e = c.schema.entities.find((x) => x.id === report.entity) ?? c.schema.entities[0];
+          load(e);
+        }
+        body = renderReports(c, w, report, movements);
+      }
     } else if (route.page === 'profile') {
       body = w.user ? renderProfile(c, w, profileForm) : renderLogin(c, loginState);
     } else if (!schema.entities.length) {
@@ -232,6 +249,17 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
       c.schema.entities.forEach(load);
       if (c.schema.dashboard?.widgets.some((x) => x === 'attention' || x === 'balances')) loadMovements();
       body = (needsLogin() && w.hasPublic ? `<div class="fx-alert fx-alert-info">${c.t('publicOnly')}</div>` : '') + renderDashboard(c);
+    } else if (route.print) {
+      active = route.entity.id;
+      load(route.entity);
+      c.schema.entities.forEach((e) => {
+        if (relationsOf(c.schema, route.entity!).some((r) => r.targetEntityId === e.id)) load(e);
+      });
+      const state = data.get(route.entity.id);
+      const record = state?.status === 'ok' ? state.records.find((r) => r.id === route.recordId) : undefined;
+      const form = route.entity.printForms?.find((f) => f.id === route.print);
+      body = state?.status !== 'ok' ? `<div class="fx-empty fx-loading">${c.t('loading')}</div>`
+        : record && form ? renderPrintPage(c, route.entity, record, form) : renderEmpty(c.t('recordNotFound'), c.t('recordNotFoundHint'));
     } else if (route.form) {
       active = route.entity.id;
       load(route.entity);
@@ -272,6 +300,7 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
     const snap = sameScreen ? snapshotForms(root) : null;
     if (notice) body = `<div class="fx-alert${notice.tone === 'ok' ? ' fx-alert-ok' : ''}" role="alert" data-notice>${esc(notice.text)}</div>${body}`;
     root.innerHTML = renderShell(c, active, body);
+    root.classList.toggle('fx-printing-form', !!route.print);
     if (snap?.size) restoreForms(root, snap);
     if (focusedId) (root.querySelector(`#${CSS.escape(focusedId)}`) as HTMLElement | null)?.focus();
     options.onRender?.({ path: options.router.get(), entityId: route.entity?.id ?? null, recordId: route.recordId, root });
@@ -357,6 +386,25 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
     if (target.closest('[data-logout]')) {
       session?.logout();
       options.router.go('/');
+      return;
+    }
+    const repTab = target.closest<HTMLElement>('[data-report-tab]');
+    if (repTab) {
+      report = { ...report, tab: repTab.dataset.reportTab as ReportState['tab'] };
+      render();
+      return;
+    }
+    if (target.closest('[data-report-csv]')) {
+      const table = root.querySelector<HTMLTableElement>('[data-report-table]');
+      if (!table) return;
+      const blob = new Blob([tableToCsv(table, schema.locale ?? 'ru')], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `report-${table.dataset.reportTable}-${report.from}-${report.to}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
       return;
     }
     const basisBtn = target.closest<HTMLElement>('[data-basis]');
@@ -515,6 +563,14 @@ export function mountPortal(root: HTMLElement, options: PortalOptions): PortalHa
 
   const onChange = (e: Event) => {
     const el = e.target as HTMLSelectElement;
+    if (el.matches('[data-report]')) {
+      const key = el.dataset.report as keyof ReportState;
+      report = { ...report, [key]: el.value || undefined } as ReportState;
+      if (key === 'entity') report = { ...report, groupBy: undefined, sum: undefined };
+      if ((key === 'from' || key === 'to') && !el.value) report = { ...report, [key]: defaultReportState(now())[key] };
+      render();
+      return;
+    }
     if (el.matches('[data-staff-role]') && session) {
       session.staff.update(el.dataset.staffRole!, { role: el.value }).then(loadStaff).catch((err: Error) => alertError(err));
     }

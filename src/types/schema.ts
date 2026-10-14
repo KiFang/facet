@@ -106,6 +106,18 @@ export interface ClubEntity {
    * совпадающие поля копируются, `set` задаёт значения (например, вид «Возврат»).
    */
   basedOn?: BasisRule[];
+  /** Печатные формы: акт, ордер, протокол — шаблоны с подстановкой полей. */
+  printForms?: PrintForm[];
+}
+
+export interface PrintForm {
+  id: string;
+  name: string;
+  /**
+   * Шаблон: строки «# », «## », таблицы «| … |», «---», **жирный**;
+   * {{Название поля}} или {{id_поля}}, а также {{клуб}}, {{сегодня}}, {{сотрудник}}, {{номер}}.
+   */
+  body: string;
 }
 
 export interface BasisRule {

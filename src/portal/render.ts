@@ -139,6 +139,9 @@ export function renderShell(ctx: RenderCtx, active: string, body: string): strin
   const balancesTab = ctx.ws?.registers.length
     ? `<a class="fx-tab" ${navAttr('/balances')}${active === '/balances' ? ' aria-current="page"' : ''}>${icon('Wallet', 15)}${esc(t('balances'))}</a>`
     : '';
+  const reportsTab = ctx.ws && !ctx.ws.legacy && (ctx.ws.user || !ctx.ws.hasPublic) && schema.entities.length
+    ? `<a class="fx-tab" ${navAttr('/reports')}${active === '/reports' ? ' aria-current="page"' : ''}>${icon('ChartColumn', 15)}${esc(t('rep.title'))}</a>`
+    : '';
   const staffTab = ctx.ws?.canStaff
     ? `<a class="fx-tab" ${navAttr('/staff')}${active === '/staff' ? ' aria-current="page"' : ''}>${icon('Users', 15)}${esc(t('staff'))}</a>`
     : '';
@@ -150,6 +153,7 @@ export function renderShell(ctx: RenderCtx, active: string, body: string): strin
       return `<a class="fx-tab" ${navAttr(`/${e.id}`)}${active === e.id ? ' aria-current="page"' : ''}>${icon(e.icon, 15)}${esc(e.pluralName)}${count}</a>`;
     }),
     balancesTab,
+    reportsTab,
     staffTab,
   ].join('');
 
@@ -528,6 +532,8 @@ export function renderDetail(ctx: RenderCtx, entity: ClubEntity, recordId: strin
         : ''
     }</div>
   </header>
+  ${entity.printForms?.length ? `<div class="fx-basis"><span class="fx-muted">${esc(t('printForms'))}:</span>${entity.printForms
+    .map((f) => `<a class="fx-btn fx-btn-ghost" data-print-link="${esc(f.id)}" ${navAttr(`/${entity.id}/${record.id}/print/${f.id}`)}>${icon('Printer', 15)}${esc(f.name)}</a>`).join('')}</div>` : ''}
   ${basisBlock(ctx, entity)}
   ${images.length ? `<div class="fx-gallery">${images.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}
   <section class="fx-panel"><h3>${esc(t('details'))}</h3><dl class="fx-rows fx-rows-wide">${rows}${relRows}</dl></section>

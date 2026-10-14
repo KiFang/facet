@@ -719,4 +719,12 @@ export const en: UiStrings = {
   'basis.nothing': "— nothing —",
   'basis.add': "Rule",
   'basis.newLabel': "Create based on this",
+
+  'pf.title': "Print forms",
+  'pf.hint': "Act, voucher, minutes: a button on the record page opens an A4 sheet to print or save as PDF. Click a field below to insert it.",
+  'pf.name': "Form name",
+  'pf.body': "Template",
+  'pf.add': "Print form",
+  'pf.newName': "New form",
+  'pf.signature': "Signature",
 };

@@ -196,6 +196,21 @@
 .fx-attn-warn > .fx-icon { color: #d97706; }
 .fx-attn-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .fx-attn-item a { text-decoration: none; }
+.fx-report-controls { flex-direction: row !important; flex-wrap: wrap; align-items: flex-end; gap: var(--fx-gap) !important; }
+.fx-report-field { display: flex; flex-direction: column; gap: 4px; min-width: 160px; flex: 0 1 220px; }
+.fx-report-table thead th { text-align: left; }
+.fx-bar-cell { width: 28%; min-width: 120px; }
+.fx-hbar { display: block; height: 10px; border-radius: 99px; background: var(--fx-primary); opacity: .75; }
+.fx-pf-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.fx-pf-page { background: #fff; color: #111; max-width: 794px; width: 100%; margin: 0 auto; padding: 56px 64px; box-shadow: var(--fx-shadow); border-radius: 4px; font-family: "PT Serif", Georgia, serif; font-size: 15px; line-height: 1.55; }
+.fx-pf-page h1 { font-size: 22px; text-align: center; margin: 0 0 4px; }
+.fx-pf-page h2 { font-size: 16px; text-align: center; font-weight: 600; margin: 0 0 18px; }
+.fx-pf-page p { margin: 0 0 12px; }
+.fx-pf-page hr { border: 0; border-top: 1px solid #999; margin: 28px 0 18px; }
+.fx-pf-table { width: 100%; border-collapse: collapse; margin: 6px 0 16px; }
+.fx-pf-table th, .fx-pf-table td { border: 1px solid #555; padding: 6px 10px; text-align: left; }
+.fx-pf-table th { background: #f1f1f1; }
+.fx-pf-value { font-weight: 600; }
 .fx-basis { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .fx-panel.fx-form { display: flex; flex-direction: column; gap: var(--fx-gap); }
 .fx-form h2, .fx-form h3 { display: flex; align-items: center; gap: 10px; font-weight: 700; }
@@ -232,6 +247,9 @@ textarea.fx-input { resize: vertical; min-height: 84px; }
 .fx-table select.fx-input { padding: 4px 6px; min-width: 140px; }
 
 @media print {
+  .fx-printing-form .fx-hero, .fx-printing-form .fx-nav, .fx-printing-form .fx-footer, .fx-pf-toolbar { display: none !important; }
+  .fx-printing-form .fx-shell { padding: 0 !important; max-width: none !important; }
+  .fx-pf-page { box-shadow: none !important; padding: 0 !important; max-width: none !important; }
   .fx-user, [data-logout], .fx-form-actions, [data-delete], [data-testid="fx-add"], [data-testid="fx-edit"] { display: none !important; }
   .fx-root { background: #fff !important; color: #000 !important; font-size: 11pt; }
   .fx-nav, .fx-hero-actions, .fx-toolbar-actions, .fx-footer, .fx-back, .fx-detail-actions .fx-btn, .fx-views { display: none !important; }

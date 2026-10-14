@@ -13,7 +13,7 @@ import { Markdown, headingsOf, plain } from './markdown';
 import type { HelpSection } from './types';
 
 const ICONS: Record<string, LucideIcon> = {
-  Rocket, LayoutPanelLeft, Flag, Boxes, Link2, LayoutGrid, Palette, Home, Table2, FileSpreadsheet, Plug, Server, Settings, Keyboard, LifeBuoy, ShieldCheck, Wallet,
+  Rocket, LayoutPanelLeft, Flag, Boxes, Link2, LayoutGrid, Palette, Home, Table2, FileSpreadsheet, Plug, Server, Settings, Keyboard, LifeBuoy, ShieldCheck, Wallet, Printer,
 };
 
 const fromHash = () => decodeURIComponent(location.hash.slice(1)).split('/');

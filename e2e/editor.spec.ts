@@ -340,6 +340,19 @@ test('учёт: касса и выдача инвентаря, остатки и
   await expect(pv.locator('select[name=type]')).toHaveValue('Возврат');
   await expect(pv.locator('select[name=item]')).not.toHaveValue('');
 
+  // Печатная форма акта и отчёты.
+  await pv.locator('[data-nav="/issues"]').first().click();
+  await pv.locator('.fx-table tbody tr').first().click();
+  await pv.locator('[data-print-link="act"]').click();
+  await expect(pv.locator('.fx-pf-page h1')).toContainText('Акт №');
+  await expect(pv.locator('.fx-pf-table')).toBeVisible();
+  await pv.locator('[data-nav="/reports"]').first().click();
+  await expect(pv.locator('[data-report-table="turnover"]')).toBeVisible();
+  await pv.locator('[data-report-tab="summary"]').click();
+  await pv.locator('[data-report="entity"]').selectOption('cash_ops');
+  await pv.locator('[data-report="groupBy"]').selectOption('article');
+  await expect(pv.locator('[data-report-table="summary"] tbody tr').first()).toBeVisible();
+
   // Главная: что требует внимания и итоги регистров.
   await pv.locator('[data-nav="/"]').first().click();
   await expect(pv.locator('.fx-attention')).toContainText('Движения денег');

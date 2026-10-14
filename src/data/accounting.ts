@@ -1,5 +1,6 @@
 import type { ClubEntity, ClubRegister, ClubSchema, Locale } from '@/types/schema';
 import { uniqueId } from '@/lib/id';
+import { defaultPrintForms } from '@/portal/printforms';
 
 /** Готовые решения учёта: регистр остатков + операции, которые в него пишут. */
 export type AccountingPackId = 'cash' | 'equipment';
@@ -74,6 +75,7 @@ export function buildAccountingPack(schema: ClubSchema, pack: AccountingPackId):
         relations: [],
         view: { type: 'table' },
         postings: [{ register: regId, direction: { field: 'type', in: [inc], out: [out] }, dimensions: { article: 'article' }, resources: { amount: 'amount' }, dateField: 'date' }],
+        printForms: defaultPrintForms('cash', en),
       }],
     };
   }
@@ -118,6 +120,7 @@ export function buildAccountingPack(schema: ClubSchema, pack: AccountingPackId):
         view: { type: 'table' },
         postings: [{ register: regId, direction: { field: 'type', in: [give], out: [back] }, dimensions: { item: 'item', holder: 'holder' }, resources: { qty: 'qty' }, dateField: 'date' }],
         basedOn: [{ from: opId, label: en ? 'Register the return' : 'Оформить возврат', set: { type: back } }],
+        printForms: defaultPrintForms('equipment', en),
       },
     ],
   };
