@@ -39,6 +39,9 @@ const ru = {
   'view.kanban': 'Канбан',
   'view.calendar': 'Календарь',
   sortBy: 'Сортировать по «{name}»',
+  print: 'Печать',
+  csv: 'CSV',
+  csvTitle: 'Скачать таблицу для Excel (с учётом поиска)',
 };
 
 export type PortalStrings = typeof ru;
@@ -82,6 +85,9 @@ const en: PortalStrings = {
   'view.kanban': 'Kanban',
   'view.calendar': 'Calendar',
   sortBy: 'Sort by “{name}”',
+  print: 'Print',
+  csv: 'CSV',
+  csvTitle: 'Download the table for Excel (respects search)',
 };
 
 const DICTS: Record<Locale, PortalStrings> = { ru, en };

@@ -125,6 +125,17 @@ class LocalServer {
       throw new Error('Система уже установлена — используйте обновление, чтобы не потерять данные');
     }
 
+    if (bundle.kind === 'update') {
+      // Файлы плагинов генерируются целиком — убираем прежние (в т.ч. отключённых плагинов).
+      const hooks = path.join(this.systemDir, 'pocketbase', 'pb_hooks');
+      for (const f of fs.existsSync(hooks) ? fs.readdirSync(hooks) : []) {
+        if (/^plugin-.*\.pb\.js$/.test(f)) fs.rmSync(path.join(hooks, f));
+      }
+      fs.rmSync(path.join(this.systemDir, 'web', 'plugins'), { recursive: true, force: true });
+      const defaults = bundle.files.find((f) => f.path === 'env.defaults');
+      if (defaults) this.upsertPluginSecrets(defaults.content);
+    }
+
     for (const file of bundle.files) {
       let rel = file.path;
       if (bundle.kind === 'update') {
@@ -140,6 +151,17 @@ class LocalServer {
     this.syncPublic();
     await this.start();
     return this.info();
+  }
+
+  /** Секреты плагинов из обновления заменяют прежние значения в .env (остальное в .env не трогаем). */
+  upsertPluginSecrets(text) {
+    const envFile = path.join(this.systemDir, '.env');
+    const updates = parseEnv(text);
+    const keys = Object.keys(updates).filter((k) => k.startsWith('FACET_PLUGIN_'));
+    if (!keys.length) return;
+    const lines = (fs.existsSync(envFile) ? fs.readFileSync(envFile, 'utf8') : '').split(/\r?\n/).filter((l) => !keys.some((k) => l.startsWith(`${k}=`)));
+    while (lines.length && lines[lines.length - 1] === '') lines.pop();
+    fs.writeFileSync(envFile, `${lines.join('\n')}\n${keys.map((k) => `${k}=${updates[k]}`).join('\n')}\n`);
   }
 
   /** Портал отдаётся самим PocketBase: web/* + club-schema.json в pb_public. */

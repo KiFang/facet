@@ -6,9 +6,9 @@ import { useT, useUiLocale } from '@/i18n';
 import { cn } from '@/lib/cn';
 
 const SEVERITY_STYLE: Record<SchemaChange['severity'], { icon: typeof Check; cls: string }> = {
-  safe: { icon: CircleCheck, cls: 'text-emerald-300' },
-  warning: { icon: AlertTriangle, cls: 'text-amber-300' },
-  danger: { icon: AlertOctagon, cls: 'text-rose-300' },
+  safe: { icon: CircleCheck, cls: 'text-success' },
+  warning: { icon: AlertTriangle, cls: 'text-warning' },
+  danger: { icon: AlertOctagon, cls: 'text-danger' },
 };
 
 /** Что изменится в базе: безопасно / предупреждение / удаление данных. */
@@ -17,8 +17,8 @@ export function ChangesList({ bundle }: { bundle: ExportBundle }) {
   const locale = useUiLocale();
   const changes = bundle.diff.changes;
   return (
-    <div className="max-h-48 space-y-1 overflow-auto rounded-xl border border-zinc-800 p-3 text-sm">
-      {changes.length === 0 && !bundle.seededRows && <p className="text-zinc-400">{t('update.noChanges')}</p>}
+    <div className="max-h-48 space-y-1 overflow-auto rounded-lg border border-line p-3 text-sm">
+      {changes.length === 0 && !bundle.seededRows && <p className="text-fg-muted">{t('update.noChanges')}</p>}
       {changes.map((c, i) => {
         const { icon: Icon, cls } = SEVERITY_STYLE[c.severity];
         return (
@@ -29,7 +29,7 @@ export function ChangesList({ bundle }: { bundle: ExportBundle }) {
         );
       })}
       {bundle.seededRows > 0 && (
-        <div className="flex items-start gap-2 text-emerald-300">
+        <div className="flex items-start gap-2 text-success">
           <Database className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{t('export.seeded', { n: bundle.seededRows })}</span>
         </div>

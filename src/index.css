@@ -2,9 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Facet OS — дизайн-токены редактора. Светлая тема по умолчанию, тёмная — [data-theme="dark"]. */
 @layer base {
-  html { color-scheme: dark; }
-  body { @apply bg-zinc-950 font-sans antialiased; }
-  ::selection { @apply bg-violet-500/40; }
-  * { scrollbar-width: thin; scrollbar-color: #3f3f46 transparent; }
+  :root {
+    color-scheme: light;
+    --c-app: 240 241 244;
+    --c-panel: 255 255 255;
+    --c-sunken: 247 248 250;
+    --c-raised: 255 255 255;
+    --c-hover: 236 238 242;
+    --c-line: 224 227 232;
+    --c-line-strong: 200 205 213;
+    --c-fg: 26 29 35;
+    --c-fg-muted: 82 89 102;
+    --c-fg-subtle: 128 135 148;
+    --c-accent: 36 87 214;
+    --c-accent-hover: 28 72 186;
+    --c-accent-fg: 255 255 255;
+    --c-accent-soft: 230 238 253;
+    --c-accent-text: 30 76 196;
+    --c-danger: 200 40 48;
+    --c-danger-soft: 253 236 237;
+    --c-warning: 166 102 0;
+    --c-warning-soft: 255 244 219;
+    --c-success: 22 128 72;
+    --c-success-soft: 229 245 236;
+    --c-shadow: 15 23 42;
+  }
+
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --c-app: 17 18 21;
+    --c-panel: 24 25 29;
+    --c-sunken: 30 32 37;
+    --c-raised: 34 36 42;
+    --c-hover: 40 43 50;
+    --c-line: 44 47 55;
+    --c-line-strong: 64 68 79;
+    --c-fg: 230 233 238;
+    --c-fg-muted: 162 168 179;
+    --c-fg-subtle: 115 122 135;
+    --c-accent: 82 130 255;
+    --c-accent-hover: 108 150 255;
+    --c-accent-fg: 255 255 255;
+    --c-accent-soft: 33 44 74;
+    --c-accent-text: 140 172 255;
+    --c-danger: 240 100 100;
+    --c-danger-soft: 62 29 32;
+    --c-warning: 232 172 64;
+    --c-warning-soft: 58 45 20;
+    --c-success: 76 192 124;
+    --c-success-soft: 24 50 37;
+    --c-shadow: 0 0 0;
+  }
+
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-app font-sans text-sm text-fg antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  ::selection { background: rgb(var(--c-accent) / 0.25); }
+  * { scrollbar-width: thin; scrollbar-color: rgb(var(--c-line-strong)) transparent; }
+  :focus-visible { outline: 2px solid rgb(var(--c-accent) / 0.6); outline-offset: 1px; }
+  kbd {
+    @apply inline-flex h-[18px] min-w-[18px] items-center justify-center rounded border border-line bg-sunken px-1 font-sans text-2xs font-medium text-fg-muted;
+  }
 }

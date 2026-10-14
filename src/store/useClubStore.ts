@@ -3,6 +3,9 @@ import { persist } from 'zustand/middleware';
 import { temporal, type TemporalState } from 'zundo';
 import { buildPresetSchema } from '@/data/presets';
 import { normalizeSchema, normalizeView } from '@/utils/normalize';
+import type { InstalledPlugin, PluginManifest } from '@/plugins/types';
+import { BUILTIN_BY_ID } from '@/plugins/catalog';
+import { defaultSettings, manifestOf } from '@/plugins/runtime';
 import type {
   ClubEntity,
   ClubSchema,
@@ -42,6 +45,8 @@ export interface ClubState {
   activeEntityId: string | null;
   baseline: Baseline | null;
   seeds: Record<string, SeedBatch>;
+  /** Секреты плагинов (токены). Не входят в схему и ссылку «Поделиться» — только в .env экспорта. */
+  pluginSecrets: Record<string, Record<string, string>>;
 
   setEditorMode: (mode: EditorMode) => void;
   setClubInfo: (info: Partial<Pick<ClubSchema, 'clubName' | 'motto'>>) => void;
@@ -61,10 +66,19 @@ export interface ClubState {
   updateField: (entityId: string, fieldId: string, updates: Partial<EntityField>) => void;
   removeField: (entityId: string, fieldId: string) => void;
   renameFieldId: (entityId: string, fieldId: string, nextId: string) => void;
+  moveField: (entityId: string, fieldId: string, direction: -1 | 1) => void;
 
   setActiveEntity: (id: string | null) => void;
   loadPreset: (preset: PresetId) => void;
   replaceSchema: (schema: ClubSchema) => void;
+
+  installPlugin: (idOrManifest: string | PluginManifest) => void;
+  setPluginEnabled: (id: string, enabled: boolean) => void;
+  setPluginSettings: (id: string, patch: InstalledPlugin['settings']) => void;
+  setPluginSecret: (id: string, key: string, value: string) => void;
+  removePlugin: (id: string) => void;
+  /** Заменить все строки раздела (редактор данных, режим «черновик»). */
+  setSeedRows: (entityId: string, rows: Record<string, string>[], source: string) => void;
 
   setBaseline: (baseline: Baseline | null) => void;
   setSeeds: (batch: SeedBatch) => void;
@@ -85,6 +99,12 @@ const mapEntity = (
 /** После правки полей вид раздела может ссылаться на удалённое поле — пересчитываем. */
 const withView = (e: ClubEntity): ClubEntity => ({ ...e, view: normalizeView(e) });
 
+/** Разделы, которые приносит плагин (например «Журнал изменений»), добавляются, если их ещё нет. */
+function withContributedEntities(schema: ClubSchema, manifest: PluginManifest): ClubSchema {
+  const add = (manifest.contributes?.entities ?? []).filter((e) => !schema.entities.some((x) => x.id === e.id));
+  return add.length ? { ...schema, entities: [...schema.entities, ...add.map((e) => withView(structuredClone(e)))] } : schema;
+}
+
 /** Удаляет из seed-строк ключи полей, которых больше нет, и переименовывает ключи. */
 function remapSeeds(
   seeds: Record<string, SeedBatch>,
@@ -104,6 +124,7 @@ export const useClubStore = create<ClubState>()(
         activeEntityId: 'events',
         baseline: null,
         seeds: {},
+        pluginSecrets: {},
 
         setEditorMode: (mode) => set((s) => ({ schema: { ...s.schema, editorMode: mode } })),
 
@@ -237,6 +258,18 @@ export const useClubStore = create<ClubState>()(
             };
           }),
 
+        moveField: (entityId, fieldId, direction) =>
+          set((s) => ({
+            schema: mapEntity(s.schema, entityId, (e) => {
+              const fields = [...e.fields];
+              const from = fields.findIndex((f) => f.id === fieldId);
+              const to = from + direction;
+              if (from < 0 || to < 0 || to >= fields.length) return e;
+              [fields[from], fields[to]] = [fields[to], fields[from]];
+              return { ...e, fields };
+            }),
+          })),
+
         setActiveEntity: (id) => set({ activeEntityId: id }),
 
         loadPreset: (preset) =>
@@ -252,6 +285,57 @@ export const useClubStore = create<ClubState>()(
             const seeds = Object.fromEntries(Object.entries(s.seeds).filter(([id]) => ids.has(id)));
             const keepActive = s.activeEntityId && ids.has(s.activeEntityId);
             return { schema: next, seeds, activeEntityId: keepActive ? s.activeEntityId : (next.entities[0]?.id ?? null) };
+          }),
+
+        installPlugin: (idOrManifest) =>
+          set((s) => {
+            const manifest = typeof idOrManifest === 'string' ? BUILTIN_BY_ID.get(idOrManifest)?.manifest : idOrManifest;
+            if (!manifest) return s;
+            const plugins = (s.schema.plugins ?? []).filter((p) => p.id !== manifest.id);
+            const installed: InstalledPlugin = {
+              id: manifest.id,
+              enabled: true,
+              settings: defaultSettings(manifest),
+              ...(BUILTIN_BY_ID.has(manifest.id) ? {} : { manifest }),
+            };
+            return { schema: withContributedEntities({ ...s.schema, plugins: [...plugins, installed] }, manifest) };
+          }),
+
+        setPluginEnabled: (id, enabled) =>
+          set((s) => {
+            const plugins = (s.schema.plugins ?? []).map((p) => (p.id === id ? { ...p, enabled } : p));
+            const plugin = plugins.find((p) => p.id === id);
+            const manifest = plugin && manifestOf(plugin);
+            const schema = { ...s.schema, plugins };
+            return { schema: enabled && manifest ? withContributedEntities(schema, manifest) : schema };
+          }),
+
+        setPluginSettings: (id, patch) =>
+          set((s) => ({
+            schema: {
+              ...s.schema,
+              plugins: (s.schema.plugins ?? []).map((p) => (p.id === id ? { ...p, settings: { ...p.settings, ...patch } } : p)),
+            },
+          })),
+
+        setPluginSecret: (id, key, value) =>
+          set((s) => ({ pluginSecrets: { ...s.pluginSecrets, [id]: { ...s.pluginSecrets[id], [key]: value } } })),
+
+        removePlugin: (id) =>
+          set((s) => {
+            const pluginSecrets = { ...s.pluginSecrets };
+            delete pluginSecrets[id];
+            return { schema: { ...s.schema, plugins: (s.schema.plugins ?? []).filter((p) => p.id !== id) }, pluginSecrets };
+          }),
+
+        setSeedRows: (entityId, rows, source) =>
+          set((s) => {
+            if (!rows.length) {
+              const seeds = { ...s.seeds };
+              delete seeds[entityId];
+              return { seeds };
+            }
+            return { seeds: { ...s.seeds, [entityId]: { entityId, rows, source, importedAt: new Date().toISOString() } } };
           }),
 
         setBaseline: (baseline) => set({ baseline }),
@@ -287,7 +371,7 @@ export const useClubStore = create<ClubState>()(
     {
       name: 'facet-os:schema',
       version: 2,
-      partialize: (s) => ({ schema: s.schema, activeEntityId: s.activeEntityId, baseline: s.baseline, seeds: s.seeds }),
+      partialize: (s) => ({ schema: s.schema, activeEntityId: s.activeEntityId, baseline: s.baseline, seeds: s.seeds, pluginSecrets: s.pluginSecrets }),
       migrate: (persisted, version) => {
         const state = persisted as Partial<ClubState>;
         if (version < 2) {
@@ -304,6 +388,7 @@ export const useClubStore = create<ClubState>()(
           schema: p.schema ? normalizeSchema(p.schema) : current.schema,
           baseline: p.baseline ? { ...p.baseline, schema: normalizeSchema(p.baseline.schema) } : null,
           seeds: p.seeds ?? {},
+          pluginSecrets: p.pluginSecrets ?? {},
         };
       },
     },

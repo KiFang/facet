@@ -66,11 +66,22 @@ echo "→ Резервная копия базы…"
 )
 
 echo "→ Копирую новые файлы…"
+# Файлы плагинов генерируются целиком — убираем прежние (в т.ч. отключённых плагинов).
+rm -f "$TARGET"/pocketbase/pb_hooks/plugin-*.pb.js
+rm -rf "$TARGET/web/plugins"
 cp -R "$HERE/payload/." "$TARGET/"
 while IFS= read -r LINE || [ -n "$LINE" ]; do
   case "$LINE" in ''|\#*) continue ;; esac
   KEY=${LINE%%=*}
-  grep -q "^$KEY=" "$TARGET/.env" || printf '%s\n' "$LINE" >> "$TARGET/.env"
+  case "$KEY" in
+    FACET_PLUGIN_*)
+      # Секреты плагинов из редактора заменяют прежние значения.
+      grep -v "^$KEY=" "$TARGET/.env" > "$TARGET/.env.tmp" || true
+      mv "$TARGET/.env.tmp" "$TARGET/.env"
+      printf '%s\n' "$LINE" >> "$TARGET/.env" ;;
+    *)
+      grep -q "^$KEY=" "$TARGET/.env" || printf '%s\n' "$LINE" >> "$TARGET/.env" ;;
+  esac
 done < "$HERE/env.defaults"
 chmod +x "$TARGET"/*.sh
 

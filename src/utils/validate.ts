@@ -1,5 +1,7 @@
 import type { ClubSchema, FieldType } from '@/types/schema';
 import { normalizeSchema } from '@/utils/normalize';
+import { validateManifest } from '@/plugins/runtime';
+import { BUILTIN_BY_ID } from '@/plugins/catalog';
 
 const FIELD_TYPES: FieldType[] = ['text', 'number', 'date', 'select', 'status', 'file', 'relation'];
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -35,6 +37,19 @@ export function validateSchema(input: unknown): ValidationResult {
     if (!isObj(s.dashboard) || typeof s.dashboard.enabled !== 'boolean' || !Array.isArray(s.dashboard.widgets) ||
         s.dashboard.widgets.some((w) => !WIDGETS.includes(w as string)))
       errors.push(`dashboard: { enabled: boolean, widgets: (${WIDGETS.join(' | ')})[] }`);
+  }
+
+  if (s.plugins !== undefined) {
+    if (!Array.isArray(s.plugins)) errors.push('plugins: массив');
+    else
+      s.plugins.forEach((p, i) => {
+        if (!isObj(p) || typeof p.id !== 'string') return errors.push(`plugins[${i}]: { id, enabled, settings }`);
+        if (p.settings !== undefined && !isObj(p.settings)) errors.push(`plugins[${i}].settings: объект`);
+        if (!BUILTIN_BY_ID.has(p.id)) {
+          if (!p.manifest) errors.push(`plugins[${i}]: неизвестный плагин «${p.id}» без манифеста`);
+          else validateManifest(p.manifest).errors.forEach((err) => errors.push(`plugins[${i}].manifest.${err}`));
+        }
+      });
   }
 
   const t = s.theme;

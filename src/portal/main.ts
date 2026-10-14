@@ -5,6 +5,29 @@ import { hashRouter, mountPortal } from './app';
 import { pocketbaseSource } from './sources/pocketbase';
 import { esc } from './render';
 
+type RenderInfo = { path: string; entityId: string | null; recordId: string | null; root: HTMLElement };
+
+declare global {
+  interface Window {
+    /** API для скриптов плагинов портала (web/plugins/*.js). */
+    FacetPortal?: {
+      version: string;
+      schema: ClubSchema | null;
+      onRender(cb: (info: RenderInfo) => void): () => void;
+    };
+  }
+}
+
+const renderListeners = new Set<(info: RenderInfo) => void>();
+window.FacetPortal = {
+  version: '1',
+  schema: null,
+  onRender(cb) {
+    renderListeners.add(cb);
+    return () => renderListeners.delete(cb);
+  },
+};
+
 const root = document.getElementById('app')!;
 
 fetch('/club-schema.json', { cache: 'no-cache' })
@@ -14,6 +37,7 @@ fetch('/club-schema.json', { cache: 'no-cache' })
   })
   .then((raw) => {
     const schema = normalizeSchema(raw);
+    window.FacetPortal!.schema = schema;
     document.title = schema.clubName;
     document.documentElement.lang = schema.locale ?? 'ru';
     mountPortal(root, {
@@ -21,6 +45,13 @@ fetch('/club-schema.json', { cache: 'no-cache' })
       source: pocketbaseSource(),
       router: hashRouter(),
       assets: { logoUrl: root.dataset.logo || undefined },
+      onRender: (info) => renderListeners.forEach((cb) => {
+        try {
+          cb(info);
+        } catch (err) {
+          console.error('[facet plugin]', err);
+        }
+      }),
     });
   })
   .catch((err: Error) => {

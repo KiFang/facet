@@ -1,15 +1,16 @@
 import * as RadixSwitch from '@radix-ui/react-switch';
 
-export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return (
     <RadixSwitch.Root
       checked={checked}
       onCheckedChange={onChange}
       aria-label={label}
       title={label}
-      className="relative h-5 w-9 shrink-0 rounded-full bg-zinc-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 data-[state=checked]:bg-violet-600"
+      disabled={disabled}
+      className="relative h-[18px] w-8 shrink-0 rounded-full border border-line-strong bg-line transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-50 data-[state=checked]:border-accent data-[state=checked]:bg-accent"
     >
-      <RadixSwitch.Thumb className="block h-4 w-4 translate-x-0.5 rounded-full bg-white shadow transition-transform data-[state=checked]:translate-x-[18px]" />
+      <RadixSwitch.Thumb className="block h-3.5 w-3.5 translate-x-[1px] rounded-full bg-white shadow transition-transform data-[state=checked]:translate-x-[15px]" />
     </RadixSwitch.Root>
   );
 }

@@ -1,0 +1,22 @@
+{
+  "id": "deadline-badge",
+  "name": { "ru": "Метка «скоро»", "en": "“Soon” badge" },
+  "version": "1.0.0",
+  "description": {
+    "ru": "Помечает на портале записи, до даты которых осталось меньше N дней, и пишет в лог сервера о новых записях.",
+    "en": "Marks portal records whose date is less than N days away and logs new records on the server."
+  },
+  "author": "Facet OS examples",
+  "icon": "Bell",
+  "settings": [
+    { "key": "entity", "type": "entity", "label": { "ru": "Раздел", "en": "Section" }, "required": true },
+    { "key": "dateField", "type": "field", "fieldOf": "entity", "fieldTypes": ["date"], "label": { "ru": "Поле даты", "en": "Date field" }, "required": true },
+    { "key": "days", "type": "number", "label": { "ru": "За сколько дней", "en": "Days ahead" }, "default": 3 },
+    { "key": "log", "type": "boolean", "label": { "ru": "Писать в лог сервера", "en": "Log on the server" }, "default": true }
+  ],
+  "contributes": {
+    "serverHook": "onRecordAfterCreateSuccess((e) => {\n  const cfg = __FACET_SETTINGS__;\n  if (cfg.log) console.log(`[deadline-badge] новая запись ${e.record.id} в ${cfg.entity}`);\n  e.next();\n}, (__FACET_SETTINGS__).entity);",
+    "portalCss": ".fx-soon{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:#fde68a;color:#78350f;font-size:11px;font-weight:600}",
+    "portalScript": "(() => {\n  const DAYS = 3;\n  window.FacetPortal?.onRender(({ root }) => {\n    root.querySelectorAll('[data-date]').forEach((el) => {\n      const d = new Date(el.getAttribute('data-date'));\n      const left = (d.getTime() - Date.now()) / 86400000;\n      if (left >= 0 && left < DAYS && !el.querySelector('.fx-soon')) {\n        const b = document.createElement('span');\n        b.className = 'fx-soon';\n        b.textContent = document.documentElement.lang === 'en' ? 'soon' : 'скоро';\n        el.appendChild(b);\n      }\n    });\n  });\n})();"
+  }
+}

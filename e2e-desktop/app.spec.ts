@@ -14,8 +14,17 @@ test.beforeAll(async () => {
     env: { ...process.env, FACET_USER_DATA: userData, LANG: 'ru_RU.UTF-8' },
   });
   page = await app.firstWindow();
+  // Как на раннере Windows с экраном 1024×768: окно прижато к рабочей области, панель инструментов узкая.
+  await app.evaluate(({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows()[0];
+    w.setMinimumSize(800, 600);
+    w.setContentSize(1008, 700); // ширина содержимого окна 1024 px с рамкой Windows
+  });
   await expect(page.getByTestId('portal-preview').locator('.fx-shell')).toBeVisible({ timeout: 30_000 });
-  await page.evaluate(() => localStorage.setItem('facet-os:ui', JSON.stringify({ state: { locale: 'ru' }, version: 0 })));
+  await page.evaluate(() => {
+    localStorage.setItem('facet-os:ui', JSON.stringify({ state: { locale: 'ru' }, version: 0 }));
+    localStorage.setItem('facet-os:settings', JSON.stringify({ state: { welcomeSeen: true }, version: 1 }));
+  });
   await page.reload();
   await expect(page.getByTestId('portal-preview').locator('.fx-shell')).toBeVisible({ timeout: 30_000 });
 });
@@ -27,12 +36,17 @@ test.afterAll(async () => {
 
 const info = () => page.evaluate(() => window.facetDesktop!.localServer.info());
 
+async function openLocal() {
+  await page.getByRole('button', { name: 'Экспорт в Self-Host' }).click();
+  await page.getByRole('menuitem', { name: /Запустить на этом компьютере/ }).click();
+}
+
 test('система клуба ставится, обновляется без потери данных и откатывается на этом ПК', async () => {
   expect(await app.evaluate(({ app: a }) => a.getName())).toBeTruthy();
   expect(await page.title()).toContain('Facet OS');
 
   // Установка
-  await page.getByRole('button', { name: /Экспорт в Self-Host/ }).click();
+  await openLocal();
   await expect(page.getByRole('radio', { name: /На этом ПК/ })).toHaveAttribute('data-state', 'on');
   await expect(page.getByText('Ещё не установлена')).toBeVisible();
   await page.getByRole('button', { name: 'Установить и запустить' }).click();
@@ -62,10 +76,10 @@ test('система клуба ставится, обновляется без 
   await page.keyboard.press('Escape');
 
   // Только тема: структура не меняется, но применить нужно (файлы портала)
-  await page.getByRole('radio', { name: /Advanced/ }).click();
-  await page.getByRole('tab', { name: /Клуб/ }).click();
-  await page.getByLabel('Девиз').fill('Новый девиз');
-  await page.getByRole('button', { name: /Экспорт в Self-Host/ }).click();
+  await page.getByRole('toolbar').getByRole('radio', { name: 'Расширенный' }).click();
+  await page.getByTestId('nav-club').click();
+  await page.getByRole('textbox', { name: /^Девиз/ }).fill('Новый девиз');
+  await openLocal();
   await page.getByRole('button', { name: 'Применить изменения' }).click();
   // Сервер перезапускается при применении — опрашиваем, пока не поднимется с новой схемой.
   await expect.poll(async () => {
@@ -78,12 +92,11 @@ test('система клуба ставится, обновляется без 
   await page.keyboard.press('Escape');
 
   // Изменение структуры в редакторе
-  await page.getByRole('tab', { name: /Модули/ }).click();
-  await page.getByRole('button', { name: /^Активисты/ }).click();
+  await page.getByTestId('nav-entity-members').click();
   await page.getByRole('button', { name: 'Добавить поле' }).click();
 
   // Обновление
-  await page.getByRole('button', { name: /Экспорт в Self-Host/ }).click();
+  await openLocal();
   await expect(page.getByText(/members: новое поле «field»/)).toBeVisible();
   await page.getByRole('button', { name: 'Применить изменения' }).click();
   // Две копии: перед обновлением темы и перед обновлением структуры.
@@ -96,7 +109,30 @@ test('система клуба ставится, обновляется без 
   expect(members.items).toHaveLength(1);
   expect(members.items[0]).toMatchObject({ full_name: 'Аня', field: '' });
 
+  await page.keyboard.press('Escape');
+
+  // Редактор данных — отдельное окно, вход в локальную систему автоматический
+  const [data] = await Promise.all([app.waitForEvent('window'), page.keyboard.press('Control+Shift+KeyD')]);
+  await data.getByTestId('table-members').click();
+  await expect(data.getByTestId('source-local')).toHaveAttribute('aria-checked', 'true');
+  await expect(data.locator('[data-cell="0:0"]')).toHaveText('Аня');
+  await data.locator('[data-cell="0:0"]').click();
+  await data.keyboard.press('F2');
+  await data.getByTestId('cell-editor').fill('Анна');
+  await data.keyboard.press('Enter');
+  await data.keyboard.press('Control+KeyS');
+  await expect(data.getByText(/Сохранено на сервере: 1/)).toBeVisible();
+  const edited = await (await fetch(`${updated.url}/api/collections/members/records`)).json();
+  expect(edited.items[0].full_name).toBe('Анна');
+  await data.close();
+
+  // Справка — тоже отдельное окно
+  const [help] = await Promise.all([app.waitForEvent('window'), page.keyboard.press('F1')]);
+  await expect(help.getByTestId('help-article')).toContainText('Facet OS');
+  await help.close();
+
   // Откат
+  await openLocal();
   await page.getByRole('button', { name: 'Откатить последнее обновление' }).click();
   await expect.poll(async () => {
     const i = await info();
@@ -105,7 +141,7 @@ test('система клуба ставится, обновляется без 
   const rolled = await info();
   expect((await (await fetch(`${rolled.url}/club-schema.json`)).json()).motto).toBe('Новый девиз');
   const after = await (await fetch(`${rolled.url}/api/collections/members/records`)).json();
-  expect(after.items[0].full_name).toBe('Аня');
+  expect(after.items[0].full_name).toBe('Аня'); // правка «Анна» была после копии — откат её убирает
   expect('field' in after.items[0]).toBe(false);
 
   // Выход из приложения останавливает PocketBase

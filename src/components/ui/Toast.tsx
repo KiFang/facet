@@ -41,15 +41,15 @@ export function Toaster() {
       {items.map((t) => {
         const Icon = ICONS[t.tone];
         return (
-          <div key={t.id} className="pointer-events-auto flex animate-fade-in items-start gap-2.5 rounded-xl border border-zinc-700 bg-zinc-900/95 p-3 text-sm text-zinc-100 shadow-2xl backdrop-blur">
-            <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', t.tone === 'success' ? 'text-emerald-400' : t.tone === 'error' ? 'text-rose-400' : 'text-violet-400')} />
+          <div key={t.id} className="pointer-events-auto flex animate-fade-in items-start gap-2.5 rounded-lg border border-line-strong bg-raised p-3 text-sm text-fg shadow-pop">
+            <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', t.tone === 'success' ? 'text-success' : t.tone === 'error' ? 'text-danger' : 'text-accent')} />
             <span className="flex-1">{t.text}</span>
             {t.action && (
-              <button type="button" className="shrink-0 font-semibold text-violet-300 hover:text-violet-200" onClick={() => { t.action!.run(); dismiss(t.id); }}>
+              <button type="button" className="shrink-0 font-semibold text-accent-text hover:underline" onClick={() => { t.action!.run(); dismiss(t.id); }}>
                 {t.action.label}
               </button>
             )}
-            <button type="button" className="shrink-0 text-zinc-500 hover:text-zinc-200" onClick={() => dismiss(t.id)} aria-label="×">
+            <button type="button" className="shrink-0 text-fg-subtle hover:text-fg" onClick={() => dismiss(t.id)} aria-label="×">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
