@@ -64,7 +64,7 @@
 .fx-tone-5 { --fx-tone: #a855f7; }
 .fx-badge { display: inline-block; white-space: nowrap; font-size: .78em; font-weight: 600; padding: 2px 9px; border-radius: 99px; background: color-mix(in srgb, var(--fx-tone, var(--fx-accent)) 20%, var(--fx-surface)); color: var(--fx-text); border: 1px solid color-mix(in srgb, var(--fx-tone, var(--fx-accent)) 35%, transparent); }
 .fx-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--fx-tone, var(--fx-muted)); flex-shrink: 0; }
-.fx-chip { display: inline-block; margin: 0 0 3px 4px; padding: 0 8px; border-radius: 99px; background: var(--fx-primary-soft); font-size: .85em; text-decoration: none; }
+.fx-chip { display: inline-block; white-space: nowrap; margin: 0 0 3px 4px; padding: 0 8px; border-radius: 99px; background: var(--fx-primary-soft); font-size: .85em; text-decoration: none; }
 .fx-chip:hover { background: var(--fx-primary); color: var(--fx-on-primary); }
 
 /* ---------- cards ---------- */

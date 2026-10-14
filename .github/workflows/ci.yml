@@ -138,6 +138,8 @@ jobs:
           curl -fsS "$B/api/collections/members/records" | jq -e '.items[0].name == "Аня" and (.items[0] | has("email"))'
           curl -fsS "$B/club-schema.json" | jq -e '.clubName | endswith("v2")'
           ls -d "$PORTAL"/backups/update-*
+          # Переименование клуба не должно создавать новый пустой том с базой.
+          test "$(docker volume ls --format '{{.Name}}' | grep -c '_pb_data$')" = 1
 
       - name: restore.sh rolls the update back
         run: |

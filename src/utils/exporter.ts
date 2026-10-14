@@ -99,7 +99,8 @@ export function generateDockerCompose(schema: ClubSchema): string {
   return `# ${schema.clubName} — self-hosted система управления клубом, собранная в Facet OS
 # Запуск:   ./install.sh            (или: docker compose up -d --build)
 # HTTPS:    DOMAIN=club.example.ru и COMPOSE_PROFILES=https в .env
-name: ${projectSlug(schema)}
+# Имя проекта (и тома с базой) закреплено в .env — COMPOSE_PROJECT_NAME, — поэтому
+# переименование клуба в редакторе не создаёт новую пустую базу при обновлении.
 
 services:
   pocketbase:
@@ -200,6 +201,9 @@ export function generateEnv(schema: ClubSchema, password = randomPassword()): st
   return `# Секреты портала «${schema.clubName}». Не публикуйте этот файл.
 PB_ADMIN_EMAIL=admin@${projectSlug(schema)}.club
 PB_ADMIN_PASSWORD=${password}
+
+# Имя Docker-проекта = имя тома с базой. Не меняйте после установки — иначе Docker создаст новую пустую базу.
+COMPOSE_PROJECT_NAME=${projectSlug(schema)}
 
 ${ENV_DEFAULTS}`;
 }

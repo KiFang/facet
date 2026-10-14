@@ -29,6 +29,18 @@ if [ "$EXPECTED" != "$ACTUAL" ]; then
   echo "  FORCE=1 — продолжаю на свой страх и риск."
 fi
 
+# Имя Docker-проекта определяет том с базой. Закрепляем текущее до любых изменений:
+# новый docker-compose.yml не должен «переехать» на новый пустой том (например, после переименования клуба).
+touch "$TARGET/.env"
+if ! grep -q '^COMPOSE_PROJECT_NAME=' "$TARGET/.env"; then
+  PROJECT=$(sed -n 's/^name:[[:space:]]*//p' "$TARGET/docker-compose.yml" | head -1 | tr -d "\"'")
+  if [ -z "$PROJECT" ]; then
+    PROJECT=$(basename "$TARGET" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]//g')
+  fi
+  printf '\n# Имя Docker-проекта = имя тома с базой. Не меняйте.\nCOMPOSE_PROJECT_NAME=%s\n' "$PROJECT" >> "$TARGET/.env"
+  echo "→ Закреплено имя проекта Docker: $PROJECT"
+fi
+
 echo "Изменения:"
 cat "$HERE/CHANGES.txt"
 echo ""
@@ -55,7 +67,6 @@ echo "→ Резервная копия базы…"
 
 echo "→ Копирую новые файлы…"
 cp -R "$HERE/payload/." "$TARGET/"
-touch "$TARGET/.env"
 while IFS= read -r LINE || [ -n "$LINE" ]; do
   case "$LINE" in ''|\#*) continue ;; esac
   KEY=${LINE%%=*}
