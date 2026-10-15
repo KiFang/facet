@@ -571,8 +571,15 @@ export function renderDashboard(ctx: RenderCtx): string {
           .slice(0, 4).map((r) => `<a class="fx-chip" ${navAttr(recordPath(e, r))}>${esc(recordTitle(e, r, t('untitled')))}</a>`).join('')}</div></div></li>`);
       }
       for (const reg of regs) {
-        const rows = regRows(reg.id);
-        const neg = (rows ?? []).filter((r) => reg.resources.some((x) => r.res[x.id] < -1e-9));
+        const rows = regRows(reg.id) ?? [];
+        // Минус по строке — проблема только там, где он запрещён; иначе (касса по статьям: расходы в минусе) смотрим общий итог.
+        if (!reg.noNegative) {
+          if (rows.length && reg.resources.some((x) => rows.reduce((n, r) => n + (r.res[x.id] ?? 0), 0) < -1e-9)) {
+            items.push(`<li class="fx-attn-item fx-attn-warn">${icon('TriangleAlert', 15)}<div><a ${navAttr('/balances')}><b>${esc(reg.name)}</b></a> — ${esc(t('negative'))}</div></li>`);
+          }
+          continue;
+        }
+        const neg = rows.filter((r) => reg.resources.some((x) => r.res[x.id] < -1e-9));
         if (!neg.length) continue;
         items.push(`<li class="fx-attn-item fx-attn-warn">${icon('TriangleAlert', 15)}<div><a ${navAttr('/balances')}><b>${esc(reg.name)}</b></a> — ${esc(t('negative'))}: ${neg
           .slice(0, 4).map((r) => esc(reg.dimensions.map((d) => dimTitle(ctx, d.target, r.dims[d.id])).filter(Boolean).join(' · ') || '—')).join(', ')}</div></li>`);
