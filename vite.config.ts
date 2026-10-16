@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { build } from 'esbuild';
 import { fileURLToPath, URL } from 'node:url';
 import path from 'node:path';
@@ -75,7 +76,7 @@ const hubConfig = defineConfig({
 });
 
 export default defineConfig(({ mode }) => (mode === 'hub' ? hubConfig : {
-  plugins: [react(), facetPortalBundle()],
+  plugins: [react(), tailwindcss(), facetPortalBundle()],
   resolve: {
     alias: { '@': SRC },
   },

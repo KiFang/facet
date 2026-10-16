@@ -51,7 +51,7 @@ export function MenuBar({ commands }: { commands: Command[] }) {
     <Menubar.Root className="flex items-center gap-0.5" aria-label={t('menu.aria')}>
       {MENUS.map(({ group, label }) => (
         <Menubar.Menu key={group}>
-          <Menubar.Trigger className="h-7 rounded px-2.5 text-sm text-fg outline-none hover:bg-hover data-[state=open]:bg-hover data-[highlighted]:bg-hover">
+          <Menubar.Trigger className="h-7 rounded px-2.5 text-sm text-fg outline-hidden hover:bg-hover data-[state=open]:bg-hover data-highlighted:bg-hover">
             {t(label)}
           </Menubar.Trigger>
           <Menubar.Portal>

@@ -141,6 +141,32 @@ async function main() {
     await page.goto(`${BASE}/c/boardgames/#/balances`);
     await page.waitForSelector('[data-reg-total], .fx-balances, table', { timeout: 15000 });
     check(!errors.length, `портал работает в браузере под /c/boardgames/${errors.length ? `: ${errors.join('; ')}` : ''}`);
+
+    // Страницы хаба экранируют то, что пишут клубы: имя клуба и председателя с безобидным маркером разметки.
+    const PROBE = `"'><i data-xss-probe>probe</i>`;
+    const inv2 = (await api('POST', '/hub/api/admin/invites', { admin: true, body: { note: PROBE } })).data;
+    const probe = await api('POST', '/hub/api/join', { body: { invite: inv2.code, slug: 'probe-club', name: `Клуб ${PROBE}`, template: 'general', chair: { ...chair, email: 'probe@uni.test', name: PROBE } } });
+    check(probe.data.status === 'active', 'клуб с разметкой в названии подключён');
+    const probeCount = () => page.locator('[data-xss-probe]').count();
+    await page.goto(`${BASE}/`);
+    check((await page.textContent('body')).includes('data-xss-probe') && (await probeCount()) === 0, 'главная хаба показывает название клуба как текст');
+    await page.goto(`${BASE}/hub/admin`);
+    await page.fill('#login-email', ADMIN.email);
+    await page.fill('#login-password', ADMIN.password);
+    await page.click('#login-form button');
+    await page.waitForSelector('#clubs-body tr');
+    for (const tab of ['clubs', 'invites', 'summary', 'audit']) {
+      await page.click(`[data-tab=${tab}]`);
+      if (tab === 'summary') await page.waitForSelector('#sum-cards .card', { timeout: 30000 });
+      check((await probeCount()) === 0, `кабинет вуза («${tab}») экранирует данные клубов`);
+    }
+    await page.goto(`${BASE}/c/probe-club/#/login`);
+    await page.locator('input[type=email]').fill('probe@uni.test');
+    await page.locator('input[type=password]').fill(chair.password);
+    await page.locator('input[type=password]').press('Enter');
+    await page.waitForFunction(() => document.body.textContent.includes('data-xss-probe'), null, { timeout: 15000 });
+    check((await probeCount()) === 0, 'портал клуба экранирует название и имя председателя');
+    await api('POST', '/hub/api/admin/clubs/probe-club/delete', { admin: true, body: { confirm: 'probe-club' } });
     await browser.close();
   }
 

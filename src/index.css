@@ -1,6 +1,106 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@theme {
+  --color-app: rgb(var(--c-app));
+  --color-panel: rgb(var(--c-panel));
+  --color-sunken: rgb(var(--c-sunken));
+  --color-raised: rgb(var(--c-raised));
+  --color-hover: rgb(var(--c-hover));
+  --color-line: rgb(var(--c-line));
+  --color-line-strong: rgb(var(--c-line-strong));
+  --color-fg: rgb(var(--c-fg));
+  --color-fg-muted: rgb(var(--c-fg-muted));
+  --color-fg-subtle: rgb(var(--c-fg-subtle));
+  --color-accent: rgb(var(--c-accent));
+  --color-accent-hover: rgb(var(--c-accent-hover));
+  --color-accent-fg: rgb(var(--c-accent-fg));
+  --color-accent-soft: rgb(var(--c-accent-soft));
+  --color-accent-text: rgb(var(--c-accent-text));
+  --color-danger: rgb(var(--c-danger));
+  --color-danger-soft: rgb(var(--c-danger-soft));
+  --color-warning: rgb(var(--c-warning));
+  --color-warning-soft: rgb(var(--c-warning-soft));
+  --color-success: rgb(var(--c-success));
+  --color-success-soft: rgb(var(--c-success-soft));
+
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --text-2xs: 11px;
+  --text-2xs--line-height: 16px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 20px;
+  --text-base: 14px;
+  --text-base--line-height: 22px;
+
+  --shadow-panel: 0 1px 2px rgb(var(--c-shadow) / 0.06);
+  --shadow-pop:
+    0 8px 28px rgb(var(--c-shadow) / 0.18),
+    0 1px 3px rgb(var(--c-shadow) / 0.12);
+
+  --animate-fade-in: fade-in 120ms ease-out;
+  --animate-pop-in: pop-in 140ms ease-out;
+  --animate-slide-down: slide-down 100ms ease-out;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -48%) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+  @keyframes slide-down {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  /* Как в Tailwind 3: «рука» над кнопками и серые подсказки в полях. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+}
 
 /* Facet OS — дизайн-токены редактора. Светлая тема по умолчанию, тёмная — [data-theme="dark"]. */
 @layer base {
@@ -65,6 +165,6 @@
   * { scrollbar-width: thin; scrollbar-color: rgb(var(--c-line-strong)) transparent; }
   :focus-visible { outline: 2px solid rgb(var(--c-accent) / 0.6); outline-offset: 1px; }
   kbd {
-    @apply inline-flex h-[18px] min-w-[18px] items-center justify-center rounded border border-line bg-sunken px-1 font-sans text-2xs font-medium text-fg-muted;
+    @apply inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-sm border border-line bg-sunken px-1 font-sans text-2xs font-medium text-fg-muted;
   }
 }

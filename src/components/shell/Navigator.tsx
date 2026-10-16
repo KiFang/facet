@@ -122,7 +122,7 @@ export function Navigator() {
                     <MenuItemBody icon={<ArrowDown className="h-3.5 w-3.5" />} label={t('common.down')} />
                   </ContextMenu.Item>
                   <ContextMenu.Separator className={menuSeparatorClass} />
-                  <ContextMenu.Item className={cn('group', menuItemClass, 'text-danger data-[highlighted]:bg-danger')} onSelect={() => remove(e.id, e.pluralName)}>
+                  <ContextMenu.Item className={cn('group', menuItemClass, 'text-danger data-highlighted:bg-danger')} onSelect={() => remove(e.id, e.pluralName)}>
                     <MenuItemBody icon={<Trash2 className="h-3.5 w-3.5" />} label={t('cmd.deleteModule')} />
                   </ContextMenu.Item>
                 </ContextMenu.Content>

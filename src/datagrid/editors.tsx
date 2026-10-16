@@ -45,11 +45,11 @@ export function TextEditor({ column, value, rel, initial, anchor, onCommit, onCa
   };
   const isDate = column.type === 'date';
   return createPortal(
-    <div className="fixed z-[80] flex" style={{ top: anchor.top, left: anchor.left, width: Math.max(anchor.width, isDate ? 200 : 120), height: anchor.height }}>
+    <div className="fixed z-80 flex" style={{ top: anchor.top, left: anchor.left, width: Math.max(anchor.width, isDate ? 200 : 120), height: anchor.height }}>
       <input
         ref={ref}
         data-testid="cell-editor"
-        className="h-full min-w-0 flex-1 border-2 border-accent bg-panel px-1.5 text-sm text-fg outline-none"
+        className="h-full min-w-0 flex-1 border-2 border-accent bg-panel px-1.5 text-sm text-fg outline-hidden"
         value={text}
         inputMode={column.type === 'number' ? 'decimal' : undefined}
         placeholder={isDate ? t('grid.datePlaceholder') : undefined}
@@ -190,7 +190,7 @@ export function ChoiceEditor({ column, value, rel, initial, anchor, onCommit, on
     <div
       ref={boxRef}
       data-testid="choice-editor"
-      className="fixed z-[80] flex flex-col overflow-hidden rounded-md border border-line-strong bg-raised shadow-pop animate-pop-in"
+      className="fixed z-80 flex flex-col overflow-hidden rounded-md border border-line-strong bg-raised shadow-pop animate-pop-in"
       style={pos}
       onKeyDown={(e) => {
         e.stopPropagation();
@@ -218,7 +218,7 @@ export function ChoiceEditor({ column, value, rel, initial, anchor, onCommit, on
         <Search className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
         <input
           ref={inputRef}
-          className="h-8 min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-subtle"
+          className="h-8 min-w-0 flex-1 bg-transparent text-sm text-fg outline-hidden placeholder:text-fg-subtle"
           placeholder={t('grid.searchOptions')}
           value={query}
           onChange={(e) => {

@@ -13,7 +13,7 @@ export function AccordionTrigger({ children, className, ...props }: RadixAccordi
     <RadixAccordion.Header className="flex min-w-0 flex-1">
       <RadixAccordion.Trigger
         className={cn(
-          'group flex flex-1 items-center gap-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted transition-colors hover:text-fg focus-visible:outline-none',
+          'group flex flex-1 items-center gap-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-fg-muted transition-colors hover:text-fg focus-visible:outline-hidden',
           className,
         )}
         {...props}

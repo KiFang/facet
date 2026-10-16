@@ -182,4 +182,4 @@ e2e/, e2e-desktop/             # Playwright: редактор в браузер�
 docs/, examples/               # руководство разработчика плагинов, пример плагина
 ```
 
-Стек: React + TypeScript + Vite, Electron, Tailwind CSS, Radix UI, Zustand + zundo, lucide, JSZip. Сервер клуба — PocketBase 0.25, Nginx, Caddy.
+Стек: React + TypeScript + Vite, Electron, Tailwind CSS, Radix UI, Zustand + zundo, lucide, JSZip. Сервер клуба — PocketBase 0.40, Nginx, Caddy.
