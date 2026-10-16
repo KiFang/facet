@@ -1,13 +1,13 @@
 # Facet Hub — сервер клубов вуза. Сборка из корня репозитория:
 #   docker build -f hub/Dockerfile -t facet-hub .
-FROM node:22-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY . .
 RUN npm run build:hub
 
-FROM node:22-alpine
+FROM node:25-alpine
 ARG PB_VERSION=0.40.5
 ARG TARGETARCH=amd64
 RUN apk add --no-cache ca-certificates tzdata unzip wget \
