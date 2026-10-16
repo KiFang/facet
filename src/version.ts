@@ -1,2 +1,2 @@
 /** Версия Facet OS (редактор, экспорт, десктоп). */
-export const FACET_VERSION = '0.4.0';
+export const FACET_VERSION = '0.4.2';
