@@ -60,7 +60,7 @@ HUB_ADMIN_EMAIL=it@univer.ru HUB_ADMIN_PASSWORD=... HUB_DATA=/var/lib/facet-hub 
 | `HUB_PUBLIC_URL` | из запроса | внешний адрес для ссылок (`https://clubs.univer.ru`) |
 | `HUB_TRUST_PROXY` | `0` (`1` в compose) | доверять `X-Forwarded-*` от обратного прокси |
 | `HUB_CLUB_PORT_BASE` | `9100` | порты PocketBase клубов на 127.0.0.1 |
-| `PB_BINARY` | `desktop/bin/<os>-<arch>/pocketbase` | путь к PocketBase 0.25 |
+| `PB_BINARY` | `desktop/bin/<os>-<arch>/pocketbase` | путь к PocketBase 0.40 |
 
 ## Настройки хаба (кабинет → «Настройки»)
 

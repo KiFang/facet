@@ -58,7 +58,7 @@ export function CommandPalette({ commands }: { commands: Command[] }) {
     <RadixDialog.Root open onOpenChange={(o) => !o && close()}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
-        <RadixDialog.Content className="fixed left-1/2 top-[14vh] z-50 w-[min(600px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-lg border border-line-strong bg-raised shadow-pop focus:outline-none">
+        <RadixDialog.Content className="fixed left-1/2 top-[14vh] z-50 w-[min(600px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-lg border border-line-strong bg-raised shadow-pop focus:outline-hidden">
           <RadixDialog.Title className="sr-only">{t('cmd.palette')}</RadixDialog.Title>
           <div className="flex items-center gap-2 border-b border-line px-3">
             <Search className="h-4 w-4 text-fg-subtle" />
@@ -68,7 +68,7 @@ export function CommandPalette({ commands }: { commands: Command[] }) {
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t('palette.placeholder')}
               aria-label={t('cmd.palette')}
-              className="h-11 flex-1 bg-transparent text-sm text-fg placeholder:text-fg-subtle focus:outline-none"
+              className="h-11 flex-1 bg-transparent text-sm text-fg placeholder:text-fg-subtle focus:outline-hidden"
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') { e.preventDefault(); setIndex((i) => Math.min(items.length - 1, i + 1)); }
                 if (e.key === 'ArrowUp') { e.preventDefault(); setIndex((i) => Math.max(0, i - 1)); }

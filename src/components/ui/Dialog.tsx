@@ -18,7 +18,7 @@ export function DialogContent({ title, description, icon, children, className, .
       <RadixDialog.Overlay className="fixed inset-0 z-40 bg-black/40 data-[state=open]:animate-fade-in" />
       <RadixDialog.Content
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[min(1080px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-line-strong bg-panel shadow-pop focus:outline-none data-[state=open]:animate-pop-in',
+          'fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[min(1080px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-line-strong bg-panel shadow-pop focus:outline-hidden data-[state=open]:animate-pop-in',
           className,
         )}
         {...props}

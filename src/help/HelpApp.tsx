@@ -134,7 +134,7 @@ export default function HelpApp() {
                 placeholder={t('help.search')}
                 aria-label={t('help.search')}
                 data-testid="help-search"
-                className="h-8 w-full rounded-md border border-line bg-sunken pl-7 pr-7 text-sm text-fg outline-none placeholder:text-fg-subtle focus:border-accent"
+                className="h-8 w-full rounded-md border border-line bg-sunken pl-7 pr-7 text-sm text-fg outline-hidden placeholder:text-fg-subtle focus:border-accent"
               />
               {query && (
                 <button type="button" aria-label={t('common.cancel')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg" onClick={() => setQuery('')}>

@@ -412,7 +412,7 @@ export function Grid({ rows, columns, locale, readOnly, sort, onSort, onPickFile
           aria-rowcount={rows.length}
           aria-colcount={columns.length}
           tabIndex={0}
-          className="relative min-h-0 flex-1 overflow-auto bg-panel outline-none focus-visible:outline-none"
+          className="relative min-h-0 flex-1 overflow-auto bg-panel outline-hidden focus-visible:outline-hidden"
           onKeyDown={onKeyDown}
           onScroll={(e) => {
             const { scrollTop: top, scrollLeft: left } = e.currentTarget;

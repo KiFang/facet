@@ -166,7 +166,7 @@ function ColorField({ name, value, onChange }: { name: keyof ThemeColors; value:
             if (HEX.test(e.target.value)) onChange(e.target.value.toLowerCase());
           }}
           onBlur={() => setDraft(value)}
-          className={cn('w-full bg-transparent font-mono text-sm uppercase text-fg focus:outline-none', !HEX.test(draft) && 'text-danger')}
+          className={cn('w-full bg-transparent font-mono text-sm uppercase text-fg focus:outline-hidden', !HEX.test(draft) && 'text-danger')}
         />
       </div>
     </div>

@@ -373,10 +373,67 @@ route('GET', /^\/hub\/api\/admin\/summary$/, async (req) => {
 
 /* ---------------------------------- прокси ---------------------------------- */
 
-/** Пути PocketBase, которые закрыты снаружи (кроме режима полного доступа вуза). */
-function blockedPath(p) {
-  return /^\/_(\/|$)/.test(p) || /^\/api\/collections\/_superusers\//.test(p) || /^\/api\/(backups|settings|logs|crons)(\/|$)/.test(p);
+/** CSP для страниц и статики клуба (как в self-host экспорте): SVG-логотип или файл со скриптом не выполнится. */
+const CLUB_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'";
+
+/**
+ * Путь запроса к клубу в каноническом виде: каждый сегмент раскодирован и закодирован заново,
+ * пустые сегменты убраны. Решение о доступе принимается по тому же пути, что уйдёт в PocketBase, —
+ * «/%5f/», «//_/» и подобные варианты не обходят правила. null — недопустимый путь.
+ */
+function canonicalPath(rest) {
+  const q = rest.indexOf('?');
+  const rawPath = q < 0 ? rest : rest.slice(0, q);
+  const query = q < 0 ? '' : rest.slice(q);
+  const segments = [];
+  for (const raw of rawPath.split('/')) {
+    if (!raw) continue;
+    let seg;
+    try {
+      seg = decodeURIComponent(raw);
+    } catch {
+      return null;
+    }
+    if (seg === '.' || seg === '..' || /[/\\\0]/.test(seg)) return null;
+    segments.push(seg);
+  }
+  const trailing = rawPath.endsWith('/') && segments.length ? '/' : '';
+  return { segments, path: `/${segments.map(encodeURIComponent).join('/')}${trailing}${query}` };
 }
+
+/** Какие коллекции клуба доступны через прокси: разделы, сотрудники и регистры из его схемы. */
+const collectionsCache = new Map();
+function clubCollections(slug) {
+  let schemaFile;
+  try {
+    schemaFile = path.join(clubs.server(slug).systemDir, 'club-schema.json');
+    const mtime = fs.statSync(schemaFile).mtimeMs;
+    const cached = collectionsCache.get(slug);
+    if (cached && cached.mtime === mtime) return cached.names;
+    const schema = JSON.parse(fs.readFileSync(schemaFile, 'utf8'));
+    const names = new Set([core.STAFF_COLLECTION, ...schema.entities.map((e) => e.id), ...(schema.registers ?? []).map((r) => core.regCollection(r.id))]);
+    collectionsCache.set(slug, { mtime, names });
+    return names;
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Разрешено ли снаружи (в режиме «только отчёты»): портал, файлы, realtime, health
+ * и API коллекций клуба. Админка PocketBase, системные коллекции, настройки, логи и бэкапы — нет.
+ */
+function allowedPath(slug, segments) {
+  const [first, second, third] = segments;
+  if (first === undefined) return true;
+  if (first.startsWith('_')) return false;
+  if (first !== 'api') return true;
+  if (second === 'health' || second === 'realtime' || second === 'files') return true;
+  if (second === 'collections' && third && segments.length > 3) return clubCollections(slug).has(third);
+  return false;
+}
+
+const AUTH_ACTIONS = /^(auth-with-password|request-password-reset|confirm-password-reset|auth-with-otp|request-otp)$/;
 
 function proxy(req, res, slug, rest) {
   const club = state.club(slug);
@@ -384,8 +441,18 @@ function proxy(req, res, slug, rest) {
   if (club.status !== 'active') {
     return send(res, 503, notFound(club.status === 'pending' ? 'Заявка клуба ещё на рассмотрении у вуза.' : 'Система клуба временно приостановлена вузом.'), { 'content-type': 'text/html; charset=utf-8' });
   }
-  if (blockedPath(rest) && state.policy.universityAccess !== 'full') {
+  const canon = canonicalPath(rest);
+  if (!canon) return send(res, 400, { message: 'Недопустимый адрес' });
+  if (state.policy.universityAccess !== 'full' && !allowedPath(slug, canon.segments)) {
     return send(res, 403, { message: 'Закрыто политикой хаба' });
+  }
+  // Подбор паролей актива: лимит попыток на адрес, как у Nginx в self-host экспорте.
+  if (req.method === 'POST' && canon.segments[0] === 'api' && AUTH_ACTIONS.test(canon.segments[3] ?? '')) {
+    try {
+      rateLimit(`clubauth:${slug}:${clientIp(req)}`, 30);
+    } catch (err) {
+      return send(res, 429, { message: err.message });
+    }
   }
   const target = clubs.target(slug);
   if (!target) return send(res, 503, notFound('Система клуба запускается — обновите страницу через минуту.'), { 'content-type': 'text/html; charset=utf-8' });
@@ -395,11 +462,13 @@ function proxy(req, res, slug, rest) {
   headers['x-forwarded-for'] = clientIp(req);
   headers['x-forwarded-proto'] = isHttps(req) ? 'https' : 'http';
   headers['x-forwarded-prefix'] = `/c/${slug}`;
-  const upstream = http.request({ host: target.host, port: target.port, method: req.method, path: rest, headers }, (up) => {
+  const upstream = http.request({ host: target.host, port: target.port, method: req.method, path: canon.path, headers }, (up) => {
     const out = { ...up.headers };
     if (typeof out.location === 'string' && out.location.startsWith('/')) out.location = `/c/${slug}${out.location}`;
     delete out['set-cookie'];
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) if (!(k in out)) out[k] = v;
+    // Файлы PocketBase приходят со своей CSP (sandbox); остальному — CSP портала.
+    if (!out['content-security-policy']) out['content-security-policy'] = CLUB_CSP;
     res.writeHead(up.statusCode ?? 502, out);
     up.pipe(res);
   });
@@ -466,6 +535,8 @@ async function handle(req, res) {
     } catch (err) {
       const status = err instanceof HubError ? err.status : 500;
       if (status === 500) console.error('[hub]', err);
+      // Внутренние ошибки (пути на сервере, вывод PocketBase) — только в журнал сервера.
+      if (!(err instanceof HubError)) return send(res, 500, { message: 'Внутренняя ошибка хаба — подробности в журнале сервера' }, extra);
       return send(res, status, { message: err.message, ...(err.extra ?? {}) }, extra);
     }
   }

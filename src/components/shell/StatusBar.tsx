@@ -61,7 +61,7 @@ export function StatusBar() {
             </button>
           </Popover.Trigger>
           <Popover.Portal>
-            <Popover.Content side="top" align="start" sideOffset={4} className="z-[60] max-h-72 w-[440px] overflow-auto rounded-md border border-line-strong bg-raised p-3 text-xs shadow-pop">
+            <Popover.Content side="top" align="start" sideOffset={4} className="z-60 max-h-72 w-[440px] overflow-auto rounded-md border border-line-strong bg-raised p-3 text-xs shadow-pop">
               <div className="mb-1 font-semibold text-fg">{t('status.problems')}</div>
               <ul className="list-disc space-y-0.5 pl-4 font-mono text-danger">{validation.errors.map((e) => <li key={e}>{e}</li>)}</ul>
             </Popover.Content>

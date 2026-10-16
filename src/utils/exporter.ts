@@ -27,7 +27,7 @@ import { pluginCss, pluginEnvLines, pluginFiles, pluginScripts } from '@/plugins
 
 export { FACET_VERSION } from '@/version';
 import { FACET_VERSION } from '@/version';
-export const PB_VERSION = '0.25.9';
+export const PB_VERSION = '0.40.5';
 
 export interface ExportFile {
   path: string;
@@ -136,7 +136,7 @@ services:
       start_period: 5s
 
   web:
-    image: nginx:1.27-alpine
+    image: nginx:stable-alpine
     restart: unless-stopped
     depends_on:
       pocketbase:
@@ -156,7 +156,7 @@ services:
 
   # HTTPS с автоматическим сертификатом Let's Encrypt. Включается COMPOSE_PROFILES=https.
   caddy:
-    image: caddy:2.8-alpine
+    image: caddy:2-alpine
     profiles: ["https"]
     restart: unless-stopped
     depends_on:

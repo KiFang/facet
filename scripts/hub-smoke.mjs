@@ -110,6 +110,13 @@ async function main() {
   check(cash.data.totalItems > 0, 'черновые операции проведены в кассу');
   check((await api('GET', '/c/boardgames/_/')).status === 403, 'админка PocketBase закрыта политикой «только отчёты»');
   check((await api('POST', '/c/boardgames/api/collections/_superusers/auth-with-password', { body: { identity: 'a', password: 'b' } })).status === 403, 'вход суперпользователя через прокси закрыт');
+  for (const p of ['/c/boardgames/%5f/', '/c/boardgames//_/', '/c/boardgames/api/%73ettings', '/c/boardgames/api/collections']) {
+    check((await api('GET', p)).status === 403, `закрыт и в закодированном виде: ${p}`);
+  }
+  for (const p of ['/c/boardgames/api/collections/%5fsuperusers/auth-with-password', '/c/boardgames/api/collections/pbc_3142635823/auth-with-password']) {
+    check((await api('POST', p, { body: { identity: 'a@b.c', password: 'x' } })).status === 403, `вход суперпользователя закрыт: ${p}`);
+  }
+  check((html.headers.get('content-security-policy') ?? '').includes("script-src 'self'"), 'портал клуба отдаётся с CSP');
   check((await api('POST', '/hub/api/admin/clubs/boardgames/credentials', { admin: true, body: {} })).status === 403, 'вуз не получает пароль базы в режиме «только отчёты»');
   const env = fs.readFileSync(path.join(DATA, 'clubs/boardgames/system/.env'), 'utf8');
   check(!env.includes('FACET_CHAIR_PASSWORD') && !env.includes(chair.password), 'пароль председателя не остался на сервере');
@@ -134,6 +141,32 @@ async function main() {
     await page.goto(`${BASE}/c/boardgames/#/balances`);
     await page.waitForSelector('[data-reg-total], .fx-balances, table', { timeout: 15000 });
     check(!errors.length, `портал работает в браузере под /c/boardgames/${errors.length ? `: ${errors.join('; ')}` : ''}`);
+
+    // Страницы хаба экранируют то, что пишут клубы: имя клуба и председателя с безобидным маркером разметки.
+    const PROBE = `"'><i data-xss-probe>probe</i>`;
+    const inv2 = (await api('POST', '/hub/api/admin/invites', { admin: true, body: { note: PROBE } })).data;
+    const probe = await api('POST', '/hub/api/join', { body: { invite: inv2.code, slug: 'probe-club', name: `Клуб ${PROBE}`, template: 'general', chair: { ...chair, email: 'probe@uni.test', name: PROBE } } });
+    check(probe.data.status === 'active', 'клуб с разметкой в названии подключён');
+    const probeCount = () => page.locator('[data-xss-probe]').count();
+    await page.goto(`${BASE}/`);
+    check((await page.textContent('body')).includes('data-xss-probe') && (await probeCount()) === 0, 'главная хаба показывает название клуба как текст');
+    await page.goto(`${BASE}/hub/admin`);
+    await page.fill('#login-email', ADMIN.email);
+    await page.fill('#login-password', ADMIN.password);
+    await page.click('#login-form button');
+    await page.waitForSelector('#clubs-body tr');
+    for (const tab of ['clubs', 'invites', 'summary', 'audit']) {
+      await page.click(`[data-tab=${tab}]`);
+      if (tab === 'summary') await page.waitForSelector('#sum-cards .card', { timeout: 30000 });
+      check((await probeCount()) === 0, `кабинет вуза («${tab}») экранирует данные клубов`);
+    }
+    await page.goto(`${BASE}/c/probe-club/#/login`);
+    await page.locator('input[type=email]').fill('probe@uni.test');
+    await page.locator('input[type=password]').fill(chair.password);
+    await page.locator('input[type=password]').press('Enter');
+    await page.waitForFunction(() => document.body.textContent.includes('data-xss-probe'), null, { timeout: 15000 });
+    check((await probeCount()) === 0, 'портал клуба экранирует название и имя председателя');
+    await api('POST', '/hub/api/admin/clubs/probe-club/delete', { admin: true, body: { confirm: 'probe-club' } });
     await browser.close();
   }
 

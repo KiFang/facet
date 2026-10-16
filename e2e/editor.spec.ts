@@ -426,3 +426,89 @@ test('хаб вуза: подключение клуба и обновление
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('publish-hub')).toContainText('Обновить в хабе');
 });
+
+test('экранирование: разметка из схемы и данных не попадает в DOM портала', async ({ page }) => {
+  // Безобидный маркер: если его разметка где-то не экранирована, в DOM появится элемент [data-xss-probe].
+  const PROBE = `"'><i data-xss-probe>probe</i>`;
+  await page.getByTestId('nav-add-accounting').click();
+  await page.getByTestId('pack-cash').click();
+  await page.getByTestId('nav-add-accounting').click();
+  await page.getByTestId('pack-equipment').click();
+  await expect(page.getByTestId('nav-register-on_hand')).toBeVisible();
+
+  await page.evaluate((P) => {
+    type Field = { id: string; name: string; type: string; options?: string[]; target?: string };
+    type Entity = { id: string; name: string; pluralName: string; fields: Field[]; printForms?: { name: string; body: string }[]; basedOn?: { label: string }[] };
+    const stored = JSON.parse(localStorage.getItem('facet-os:schema')!);
+    const s = stored.state.schema;
+    s.clubName += P;
+    s.motto = `${s.motto ?? ''}${P}`;
+    for (const r of s.roles ?? []) r.name += P;
+    for (const reg of s.registers ?? []) {
+      reg.name += P;
+      for (const d of reg.dimensions) d.name += P;
+      for (const x of reg.resources) x.name += P;
+    }
+    const seeds: Record<string, unknown> = {};
+    for (const e of s.entities as Entity[]) {
+      e.name += P;
+      e.pluralName += P;
+      for (const f of e.fields) {
+        f.name += P;
+        if (f.options) f.options.push(P);
+      }
+      for (const pf of e.printForms ?? []) {
+        pf.name += P;
+        pf.body += `\n${P} **${P}**\n| ${P} | {{${e.fields[0].name}}} |`;
+      }
+      for (const b of e.basedOn ?? []) b.label += P;
+      const rows = [0, 1, 2].map((i) => Object.fromEntries(e.fields.map((f) => {
+        if (f.type === 'number') return [f.id, String(i + 5)];
+        if (f.type === 'date') return [f.id, '2026-10-0' + (i + 1)];
+        if (f.type === 'select' || f.type === 'status') return [f.id, i === 0 ? P : f.options![0]];
+        if (f.type === 'relation') return [f.id, `${P}0`];
+        return [f.id, `${P}${i}`];
+      })));
+      seeds[e.id] = { entityId: e.id, rows, source: 'probe', importedAt: new Date().toISOString() };
+    }
+    stored.state.seeds = seeds;
+    localStorage.setItem('facet-os:schema', JSON.stringify(stored));
+  }, PROBE);
+  await page.reload();
+
+  const pv = preview(page);
+  await expect(pv.locator('.fx-shell')).toBeVisible();
+  const clean = async (where: string) => expect(await page.locator('[data-xss-probe]').count(), where).toBe(0);
+  // Маркер действительно показан — как текст.
+  await expect(pv.locator('.fx-hero')).toContainText('data-xss-probe');
+  await clean('главная');
+
+  const tabs = await pv.locator('a.fx-tab[data-nav]').evaluateAll((els) => els.map((el) => el.getAttribute('data-nav')!));
+  expect(tabs.length).toBeGreaterThan(5);
+  for (const tab of tabs) {
+    await pv.locator(`a.fx-tab[data-nav="${tab}"]`).first().click();
+    await clean(tab);
+    for (const view of await pv.locator('[data-view]').evaluateAll((els) => els.map((el) => el.getAttribute('data-view')!))) {
+      await pv.locator(`[data-view="${view}"]`).click();
+      await clean(`${tab} · ${view}`);
+    }
+    for (const t of await pv.locator('[data-report-tab]').evaluateAll((els) => els.map((el) => el.getAttribute('data-report-tab')!))) {
+      await pv.locator(`[data-report-tab="${t}"]`).click();
+      await clean(`${tab} · отчёт ${t}`);
+    }
+    const record = pv.locator(`a[data-nav^="${tab}/"]`).first();
+    if (tab !== '/' && (await record.count())) {
+      await record.click();
+      await clean(`${tab} · карточка`);
+      if (await pv.locator('[data-print-link]').count()) {
+        await pv.locator('[data-print-link]').first().click();
+        await clean(`${tab} · печатная форма`);
+        await page.goBack();
+      }
+      if (await pv.getByTestId('fx-edit').count()) {
+        await pv.getByTestId('fx-edit').click();
+        await clean(`${tab} · форма правки`);
+      }
+    }
+  }
+});

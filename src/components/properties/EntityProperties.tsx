@@ -78,7 +78,7 @@ function IdInput({ value, taken, onCommit, label }: { value: string; taken: stri
         setDraft(next);
         if (next !== value) onCommit(next);
       }}
-      className="h-6 w-full rounded border border-transparent bg-transparent px-1.5 font-mono text-2xs text-fg-subtle hover:border-line focus:border-accent focus:bg-panel focus:text-fg focus:outline-none"
+      className="h-6 w-full rounded border border-transparent bg-transparent px-1.5 font-mono text-2xs text-fg-subtle hover:border-line focus:border-accent focus:bg-panel focus:text-fg focus:outline-hidden"
     />
   );
 }

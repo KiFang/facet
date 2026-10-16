@@ -1,7 +1,7 @@
 # Facet OS — образ PocketBase с миграциями и хуками клуба.
-FROM alpine:3.20
+FROM alpine:3
 
-ARG PB_VERSION=0.25.9
+ARG PB_VERSION=0.40.5
 ARG TARGETARCH=amd64
 
 RUN apk add --no-cache ca-certificates unzip wget tzdata

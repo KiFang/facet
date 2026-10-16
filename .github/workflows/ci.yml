@@ -9,7 +9,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PB_VERSION: 0.25.9
+  PB_VERSION: 0.40.5
+  TRIVY_VERSION: 0.58.2
 
 jobs:
   check:
@@ -25,6 +26,23 @@ jobs:
       - run: npx tsc -b
       - run: npm test
       - run: npm run build
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      # Всё, что попадает в продукт (редактор, портал, хаб), — без известных уязвимостей.
+      - name: Runtime dependencies — any severity
+        run: npm audit --omit=dev
+      # Инструменты сборки и тестов — без high/critical. Остаток (moderate) печатается в лог.
+      - name: Build tooling — high and critical
+        run: npm audit --audit-level=high
 
   e2e:
     name: Editor e2e (Playwright)
@@ -100,6 +118,11 @@ jobs:
           docker restart hub
           for i in $(seq 1 60); do curl -fsS "$B/c/ci-club/api/health" && break; sleep 1; done
           curl -fsS "$B/c/ci-club/api/health" | jq -e '.code == 200'
+      # Уязвимости образа хаба: Alpine, Node, PocketBase (Go) — high/critical, для которых есть исправление.
+      - name: Scan hub image (Trivy)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache/" -v "$PWD/.trivyignore:/.trivyignore:ro" \
+            aquasec/trivy:${TRIVY_VERSION} image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /.trivyignore --no-progress facet-hub
       - if: failure()
         run: docker logs hub || true
 

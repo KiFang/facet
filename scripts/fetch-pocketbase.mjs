@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import JSZip from 'jszip';
 
-const VERSION = process.env.PB_VERSION || '0.25.9';
+const VERSION = process.env.PB_VERSION || '0.40.5';
 const OS = { win: 'windows', mac: 'darwin', linux: 'linux' };
 const ARCH = { x64: 'amd64', arm64: 'arm64' };
 

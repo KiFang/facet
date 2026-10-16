@@ -41,7 +41,7 @@ function ThemeCard({ value, current, onPick, label, icon }: { value: ThemePref; 
       onClick={() => onPick(value)}
       className={cn('rounded-md border p-1.5 text-left transition-colors', current === value ? 'border-accent ring-2 ring-accent/20' : 'border-line hover:border-line-strong')}
     >
-      <div className={cn('flex h-16 overflow-hidden rounded border', dark ? 'border-[#2c2f37] bg-[#111215]' : value === 'light' ? 'border-[#e0e3e8] bg-[#f0f1f4]' : 'border-line bg-gradient-to-r from-[#f0f1f4] from-50% to-[#111215] to-50%')}>
+      <div className={cn('flex h-16 overflow-hidden rounded border', dark ? 'border-[#2c2f37] bg-[#111215]' : value === 'light' ? 'border-[#e0e3e8] bg-[#f0f1f4]' : 'border-line bg-linear-to-r from-[#f0f1f4] from-50% to-[#111215] to-50%')}>
         <div className={cn('w-1/4 border-r', dark ? 'border-[#2c2f37] bg-[#18191d]' : 'border-[#e0e3e8] bg-white')} />
         <div className="flex-1 p-1.5">
           <div className="h-1.5 w-2/3 rounded bg-[#2457d6]" />
