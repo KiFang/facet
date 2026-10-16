@@ -82,13 +82,13 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a npm run test:desktop; else npm run test:desktop; fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Facet-OS-${{ matrix.name }}
           path: ${{ matrix.artifacts }}
           if-no-files-found: error
           retention-days: 30
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: desktop-test-results-${{ matrix.name }}
