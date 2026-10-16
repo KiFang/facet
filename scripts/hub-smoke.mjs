@@ -110,6 +110,13 @@ async function main() {
   check(cash.data.totalItems > 0, 'черновые операции проведены в кассу');
   check((await api('GET', '/c/boardgames/_/')).status === 403, 'админка PocketBase закрыта политикой «только отчёты»');
   check((await api('POST', '/c/boardgames/api/collections/_superusers/auth-with-password', { body: { identity: 'a', password: 'b' } })).status === 403, 'вход суперпользователя через прокси закрыт');
+  for (const p of ['/c/boardgames/%5f/', '/c/boardgames//_/', '/c/boardgames/api/%73ettings', '/c/boardgames/api/collections']) {
+    check((await api('GET', p)).status === 403, `закрыт и в закодированном виде: ${p}`);
+  }
+  for (const p of ['/c/boardgames/api/collections/%5fsuperusers/auth-with-password', '/c/boardgames/api/collections/pbc_3142635823/auth-with-password']) {
+    check((await api('POST', p, { body: { identity: 'a@b.c', password: 'x' } })).status === 403, `вход суперпользователя закрыт: ${p}`);
+  }
+  check((html.headers.get('content-security-policy') ?? '').includes("script-src 'self'"), 'портал клуба отдаётся с CSP');
   check((await api('POST', '/hub/api/admin/clubs/boardgames/credentials', { admin: true, body: {} })).status === 403, 'вуз не получает пароль базы в режиме «только отчёты»');
   const env = fs.readFileSync(path.join(DATA, 'clubs/boardgames/system/.env'), 'utf8');
   check(!env.includes('FACET_CHAIR_PASSWORD') && !env.includes(chair.password), 'пароль председателя не остался на сервере');
