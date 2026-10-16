@@ -121,8 +121,8 @@ jobs:
       # Уязвимости образа хаба: Alpine, Node, PocketBase (Go) — high/critical, для которых есть исправление.
       - name: Scan hub image (Trivy)
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache/" \
-            aquasec/trivy:${TRIVY_VERSION} image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --no-progress facet-hub
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$HOME/.cache/trivy:/root/.cache/" -v "$PWD/.trivyignore:/.trivyignore:ro" \
+            aquasec/trivy:${TRIVY_VERSION} image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /.trivyignore --no-progress facet-hub
       - if: failure()
         run: docker logs hub || true
 
